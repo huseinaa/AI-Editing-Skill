@@ -1,0 +1,4 @@
+# one 73s take. The pauses between points are cut, and so are two repeats:
+# 60.5-62.8 "w manno shi ghalat when done in a proper way" (said right after the same thought, the first is kept)
+# 65.5-67.5 two false starts of "fa iza you're interested"
+keep ORME2737 0.27-7.16 9.47-11.62 13.28-16.81 18.42-21.47 23.52-26.47 29.32-31.99 33.64-36.04 37.28-40.46 43.49-46.29 47.46-52.70 54.39-59.93 67.67-72.25

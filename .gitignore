@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.reel-edit/
+*.mp4
+*.mov
+.env
+reel-edit/assets/logo.png
+reel-edit/assets/sfx/*.wav
+reel-edit/deltas.md
