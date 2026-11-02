@@ -16,7 +16,7 @@ You give it a folder with the takes you filmed on your phone. It:
 2. **Cleans your voice.** It removes background noise and room echo, and sets the volume to the level Instagram and YouTube expect.
 3. **Writes captions from what you actually said.** It listens to the audio, not your script, and times every caption to your words.
 4. **Picks an edit style** from five (CLEAN, PUNCH, EXPLAINER, DEMO, OFFER) based on what you're saying.
-5. **Adds the visuals.** You get a text hook, cards, lists that build as you speak, zooms on the important lines, and your screen recordings or images. It keeps all of it inside the area Instagram doesn't cover.
+5. **Adds the visuals.** You get a plain outlined text hook, stationary 3-4-word captions, real screenshots or footage, and explanatory graphics only where useful. Zooms and risers are optional. It keeps all of it inside the area Instagram doesn't cover.
 6. **Makes the cover:** a frame of you smiling, your logo and the title.
 7. **Exports** a 1080x1920 video ready to post on Reels, Shorts or TikTok.
 
@@ -78,23 +78,35 @@ Every line should say `OK`. A `MISS` line tells you exactly what to install.
 
 ---
 
+## Update an existing installation
+
+Run `git pull origin main` inside your AI Editing Skill clone. If you installed by copying the
+folder, the clone and installed skill are separate: copy the updated `reel-edit` files into your
+installed skill again. Keep your existing `brand.json`, custom logo, optional sound files, and
+`deltas.md` feedback history. A pull alone does not refresh a separate installed copy.
+
+The editing lessons and their adoption choices are documented in
+[`reel-edit/references/natural-editing.md`](reel-edit/references/natural-editing.md).
+
+---
+
 ## Add your brand
 
-Open `reel-edit/brand.json`. Every card, caption and cover reads from it:
+Open `reel-edit/brand.json`. Fonts, explanatory graphics and covers read from it. Hooks, top takeaways, CTAs and default captions stay white with a thin dark outline:
 
 | Setting | What it changes |
 |---|---|
-| `colors` | Your palette. `primary` is the cover fade and title boxes, `bright` is buttons and highlights in cards, `highlight` is the "look here" word, `error` is for wrong or broken things |
+| `colors` | Your palette. `primary` is the cover fade and title boxes, `bright` is for explanatory UI, `highlight` is an optional diagram accent, `error` is for wrong or broken things |
 | `fonts` | Your font names and the Google Fonts link that loads them |
 | `logo` | A PNG of your logo, shown at the top of the cover. Put it in `reel-edit/assets/` |
-| `follow_line` | The line on your follow card |
+| `follow_line` | The line in your plain-text follow CTA |
 | `caption_language` | `en`, or `ar` for Arabic captions (English words stay in English letters) |
 | `browser` | `msedge` or `chrome` |
 
 The easy way: open Claude Code and say *"set up my brand in the reel-edit skill: my colors are ...,
 my font is ..., my logo is this file"*, and it fills in the file for you.
 
-Optional: the rising sound under the hook isn't included because its license doesn't allow sharing
+Optional and off by default: the rising sound under the hook isn't included because its license doesn't allow sharing
 the file. `reel-edit/assets/sfx/SOURCE.md` says where to get it for free. Without it, everything
 still works.
 

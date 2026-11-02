@@ -37,13 +37,12 @@ if a.youtube:
     OUT = a.out or f"{os.path.splitext(p.output)[0]} - YouTube.mp4"
 CRF = {"small": 24, "default": 22, "max": 18}[a.quality or p.quality]
 
-# ---- layout + motion (seconds). Nothing pops, everything eases.
+# ---- layout + motion (seconds). Text is stationary; footage/graphic motion is retained.
 # cards sit high, in the empty space above the head, so they never cover the eyes
 OVERLAY_Y, CAP_Y, CAP_Y_SPLIT = 260, 1700, 1845
 OV_IN, OV_OUT, OV_RISE = 0.45, 0.35, 50   # cards: fade + ease-out rise
 FS_IN, FS_OUT = 0.35, 0.35                # full / split from and back to the face
 XF = 0.3                                  # crossfade between back-to-back solid states
-CAP_IN = 0.12                             # caption soft fade-in
 SLIDE = 0.4                               # face slides up for split mode
 FX, FY = p.face
 SHIFT = max(0, FY - 575)                  # puts the face centre in the middle of the top area
@@ -158,7 +157,7 @@ else:
 f.append(f"[bg][{face}]overlay=x=0:y='-({'+'.join(terms) or '0'})':eval=frame:shortest=1[b0]")
 last, n = "b0", 1
 
-BORDER = 6  # white edge on the bottom window, so a dark clip does not melt into a dark shirt
+BORDER = 0  # px of white edge around a bottom window; 0 = round corners only
 
 
 def bottom_box(b):
@@ -205,7 +204,8 @@ for i, (v, s, e, k) in enumerate(vis):
             args += ["-ss", str(b["start"]), "-t", f"{end - s + 0.3:.2f}", "-itsoffset", f"{s}", "-i", b["broll"]]
             if b.get("audio"):
                 sounds.append((n, s, e, b["broll"], b["start"]))
-        fit = (f"scale={bw - 2 * BORDER}:{bh - 2 * BORDER},pad={bw}:{bh}:{BORDER}:{BORDER}:white" if k == "broll_bottom"
+        fit = ((f"scale={bw - 2 * BORDER}:{bh - 2 * BORDER},pad={bw}:{bh}:{BORDER}:{BORDER}:white" if BORDER else f"scale={bw}:{bh}")
+               if k == "broll_bottom"
                else f"scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh}")
         prep = f"{fit},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration=30,format=rgba"
         f.append(f"[{n}:v]{prep}[bx{n}]")
@@ -221,15 +221,19 @@ for i, (v, s, e, k) in enumerate(vis):
 
     chain = "format=rgba"
     if k in CARD:
-        if s >= 0.05:  # a visual that starts the reel is there on frame one, it does not fade in
+        options = p.visuals[v][2] if k == "overlay" and len(p.visuals[v]) > 2 else {}
+        stationary = options.get("motion", "ease") == "cut"
+        if not stationary and s >= 0.05:  # a visual that starts the reel is there on frame one, it does not fade in
             chain += f",fade=t=in:st={s}:d={OV_IN}:alpha=1"
-        if e < p.dur - 0.1:
+        if not stationary and e < p.dur - 0.1:
             chain += f",fade=t=out:st={e - OV_OUT:.2f}:d={OV_OUT}:alpha=1"
         w = bw if k in WINDOW else meta[v]["w"]
-        card_top = (p.visuals[v][2].get("top") if k == "overlay" and len(p.visuals[v]) > 2 else None) or OVERLAY_Y
+        card_top = options.get("top")
+        if card_top is None:
+            card_top = OVERLAY_Y
         top = win_top if k in WINDOW else card_top - meta[v]["pad"]
         x = f"{SAFE_L + (SAFE_W - w) // 2}"
-        y = f"'{top}+{OV_RISE}*pow(max(0\\,1-(t-{s})/{OV_IN})\\,3)'"
+        y = str(top) if stationary else f"'{top}+{OV_RISE}*pow(max(0\\,1-(t-{s})/{OV_IN})\\,3)'"
     else:
         if s >= 0.05:
             chain += f",fade=t=in:st={s}:d={XF if xf_in else FS_IN}:alpha=1"
@@ -239,7 +243,9 @@ for i, (v, s, e, k) in enumerate(vis):
         if k in SPLITS:
             y = str(SPLIT_Y) if xf_in else f"'{SPLIT_Y}+{OV_RISE * 2}*pow(max(0\\,1-(t-{s})/{SLIDE})\\,3)'"
     f.append(f"[{src_label}]{chain}[v{n}]")
-    f.append(f"[{last}][v{n}]overlay=x={x}:y={y}:eof_action=pass:enable='between(t,{s},{end:.2f})'[o{n}]")
+    enabled = f"gte(t,{s})*lt(t,{end:.2f})" if k == "overlay" and stationary else f"between(t,{s},{end:.2f})"
+    f.append(f"[{last}][v{n}]overlay=x={x}:y={y}:eof_action=pass:enable='{enabled}'[o{n}]")
+
     last, n = f"o{n}", n + n_used
 
 
@@ -253,7 +259,7 @@ for j, fp in enumerate(p.face_pip):
     f.append(f"[srcp{j}]crop={cw}:{ch}:{cx}:{cy},scale={bw}:{bh},format=rgba[fp0_{j}]")
     f.append(f"[{n}:v]format=gray[fpm{j}]")
     f.append(f"[fp0_{j}][fpm{j}]alphamerge{fades}[fp{j}]")
-    if circle:   # a thin white ring so the circle reads on any background
+    if circle and fp.get("ring"):   # optional white ring: "ring": True in the window
         ring = os.path.join(p.png, f"ring_{j}.png")
         im = Image.new("RGBA", (bw * 4, bh * 4), (0, 0, 0, 0))
         ImageDraw.Draw(im).ellipse([6, 6, bw * 4 - 7, bh * 4 - 7], outline=(255, 255, 255, 255), width=40)
@@ -289,7 +295,7 @@ for i, (_, s, e) in enumerate(p.captions):
     cx = st.get("x", SAFE_L + SAFE_W // 2)
     x0 = min(max(cx - w // 2, SAFE_L - 50), SAFE_R + 50 - w)   # the PNG carries 50px of transparent side padding
     args += ["-loop", "1", "-framerate", "30", "-t", f"{e - s + 0.05:.2f}", "-itsoffset", f"{s}", "-i", path]
-    f.append(f"[{n}:v]format=rgba" + (f",fade=t=in:st={s}:d={CAP_IN}:alpha=1" if s >= 0.05 else "") + f"[c{n}]")  # a caption at 0 is on frame one
+    f.append(f"[{n}:v]format=rgba[c{n}]")  # a caption at 0 is on frame one
     f.append(f"[{last}][c{n}]overlay=x={x0}:y={cy - h // 2}:eof_action=pass:enable='gte(t,{s})*lt(t,{e})'[o{n}]")
     last, n = f"o{n}", n + 1
 

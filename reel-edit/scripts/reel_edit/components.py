@@ -4,7 +4,7 @@ Canvas is the 1440x2560 master (exported at 1080x1920). Instagram safe box: x 90
 Brand palette and fonts: brand.json at the skill root (see reel_edit/brand.py).
 
 An edit.py builds VISUALS from these. Each value is one of:
-    overlay(html)   small card over the face, top of the safe box
+    overlay(html)   graphic overlay; text helpers use plain outlined text in the safe box
     split(inner)    face video on top, dark graphic panel below SPLIT_Y
     full(inner)     full-screen graphic, voice carries on
     broll(path, mode="full"|"split"|"pip", start=0)   a real video clip, muted
@@ -42,6 +42,15 @@ html, body {{ background: transparent; font-family: '{LATIN}', '{ARABIC}', sans-
 .sm .notch {{ width: 120px; height: 24px; }}
 .row {{ display: flex; align-items: center; }}
 .icon {{ display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: 900; color: #fff; flex: none; }}
+/* Text over footage, scoped so demo UI and cover styling retain their own design. */
+.text-overlay {{ width:1150px; padding:8px 12px; text-align:center; color:#fff;
+  font-weight:800; line-height:1.18; direction:rtl; unicode-bidi:plaintext;
+  -webkit-text-stroke:3px rgba(0,0,0,.9); paint-order:stroke fill;
+  text-shadow:0 3px 8px rgba(0,0,0,.6); }}
+.text-overlay .hl {{ background:transparent; color:inherit; padding:0; border-radius:0; }}
+.text-overlay .context {{ font-size:42px; font-weight:700; margin-bottom:12px; }}
+.text-overlay .support {{ font-size:44px; font-weight:700; margin-top:12px; }}
+
 .ring {{ outline: 9px solid {YELLOW}; outline-offset: 6px; }}
 """
 
@@ -52,10 +61,11 @@ def hl(text):
 
 
 # ---------------- layout wrappers ----------------
-def overlay(html, top=None):
-    """top= moves this one card (its top edge, master px). Default: high, above the eyes."""
-    return (html, "overlay", {"top": top})
-
+def overlay(html, top=None, motion="ease"):
+    """top= visible top edge in master px. motion: ease (graphics) or cut (stationary text)."""
+    if motion not in ("ease", "cut"):
+        raise ValueError("overlay motion must be 'ease' or 'cut'")
+    return (html, "overlay", {"top": top, "motion": motion})
 
 def full(inner, grid=True):
     return (f'<div class="full{" grid-bg" if grid else ""}">{inner}</div>', "full")
@@ -91,10 +101,9 @@ PHOTO = f"""<svg width="100%" height="100%" viewBox="0 0 300 150" preserveAspect
 
 # ---------------- overlay cards ----------------
 def hook_card(html, size=106):
-    """Frame-one text hook. Use hl() on one word. Keep it 7 words or fewer, 2 lines max."""
-    return overlay(f"""<div class="card" style="width:1150px;padding:54px 60px;text-align:center">
-      <div style="font-weight:900;font-size:{size}px;line-height:1.12;letter-spacing:-2px">{html}</div></div>""")
-
+    """Frame-one outlined text, seven words or fewer and at most two lines. No box."""
+    return overlay(f'<div class="text-overlay" style="font-size:{size}px">{html}</div>',
+                   top=SAFE_T + 12, motion="cut")
 
 def pill(label, kind="good"):
     """Cause pill: good = blue + check, bad = red + cross, plain = ink, no mark."""
@@ -106,35 +115,31 @@ def pill(label, kind="good"):
 
 
 def takeaway(pills, headline, sub="", color=INK):
-    """THE takeaway card: centered, cause pills on top, one big result line, optional muted sub-line.
-    pills: [("Good UI", "good"), ("Bad UX", "bad")]. Never left-aligned stacks, never dangling arrows."""
-    top = f'<div class="row" style="justify-content:center;gap:18px;margin-bottom:26px">{"".join(pill(l, k) for l, k in pills)}</div>' if pills else ""
-    return overlay(f"""<div class="card" style="width:fit-content;min-width:760px;max-width:1150px;padding:40px 56px 44px;text-align:center">
-      {top}<div style="font-size:68px;font-weight:900;line-height:1.1;color:{color};white-space:nowrap">{headline}</div>
-      {f'<div style="font-size:44px;font-weight:700;color:{MUTED};margin-top:12px">{sub}</div>' if sub else ''}</div>""")
+    """Plain takeaway. Legacy pills/color arguments remain accepted, without badges or color fills."""
+    context = " · ".join(label for label, kind in (pills or []))
+    return overlay(f"""<div class="text-overlay" style="font-size:68px">
+      {f'<div class="context">{context}</div>' if context else ''}
+      <div>{headline}</div>
+      {f'<div class="support">{sub}</div>' if sub else ''}</div>""",
+      top=SAFE_T + 12, motion="cut")
 
 
 def follow_card(line):
-    """Growth CTA. line e.g. f"Build {hl('proper')} software with AI"."""
-    return overlay(f"""<div class="card" style="width:1000px;padding:40px 50px;text-align:center">
-      <div style="margin:0 auto;width:fit-content;padding:22px 80px;border-radius:24px;background:{BRIGHT};color:#fff;font-size:64px;font-weight:900">Follow</div>
-      <div style="font-size:54px;font-weight:800;margin-top:26px;line-height:1.2">{line}</div></div>""")
+    """Growth CTA as plain outlined text."""
+    return overlay(f'<div class="text-overlay" style="font-size:64px">Follow<div class="support">{line}</div></div>',
+                   top=SAFE_T + 12, motion="cut")
 
 
 def send_card(line):
-    """Growth CTA built for sends: 'Send this to the friend whose project broke'."""
-    return overlay(f"""<div class="card" style="width:1000px;padding:40px 50px;text-align:center">
-      <div style="margin:0 auto;width:fit-content;padding:22px 70px;border-radius:24px;background:{BRIGHT};color:#fff;font-size:60px;font-weight:900">&#10148; Send this</div>
-      <div style="font-size:52px;font-weight:800;margin-top:26px;line-height:1.2">{line}</div></div>""")
+    """Send CTA as plain outlined text, without a button or icon."""
+    return overlay(f'<div class="text-overlay" style="font-size:64px">Send this<div class="support">{line}</div></div>',
+                   top=SAFE_T + 12, motion="cut")
 
 
 def keyword_card(keyword, line, verb="Comment"):
-    """Authority / Sales CTA. keyword MUST be a ready row in Freebies/registry.md. Never invent one."""
-    return overlay(f"""<div class="card" style="width:1000px;padding:40px 50px;text-align:center">
-      <div style="font-size:50px;font-weight:800;color:{MUTED}">{verb}</div>
-      <div style="margin:10px auto 0;width:fit-content;padding:14px 60px;border-radius:24px;background:{YELLOW};color:{INK};font-size:110px;font-weight:900;letter-spacing:4px">{keyword}</div>
-      <div style="font-size:50px;font-weight:800;margin-top:26px;line-height:1.2">{line}</div></div>""")
-
+    """Plain keyword CTA. Use the user-provided CTA keyword; do not invent a promised resource."""
+    return overlay(f'<div class="text-overlay" style="font-size:80px">{verb} {keyword}<div class="support">{line}</div></div>',
+                   top=SAFE_T + 12, motion="cut")
 
 # ---------------- full-screen building blocks (put inside full(...)) ----------------
 def title_block(kicker, title, size=112):
@@ -252,13 +257,14 @@ def demo_app(ring=None, grid=False):
 
 # ---------------- captions ----------------
 def caption_css(lang="ar"):
-    """Plain white, weight 800, soft shadow. 78px Arabic / 70px English keeps a 4-5 word chunk on one line."""
+    """Stationary white captions, weight 700, thin outline. Write natural 3-4 word chunks."""
     d = "rtl" if lang == "ar" else "ltr"
     return f"""
 .cap {{ display:inline-block; max-width:1290px; text-align:center; direction:{d}; unicode-bidi:plaintext;
-  font-family: {f"'{LATIN}', '{ARABIC}'" if lang == 'ar' else f"'{LATIN}'"}, sans-serif; font-weight:800; font-size:{78 if lang == 'ar' else 74}px; line-height:1.3; color:#fff; padding:44px 50px;
-  text-shadow: 0 0 3px rgba(0,0,0,.9), 0 3px 6px rgba(0,0,0,.8), 0 8px 26px rgba(0,0,0,.55); }}
-.cap .en {{ font-family: '{LATIN}', sans-serif; font-weight:800; font-size:{'.9em' if lang == 'ar' else '1em'}; }}
+  font-family: {f"'{ARABIC}', '{LATIN}'" if lang == 'ar' else f"'{LATIN}'"}, sans-serif; font-weight:700; font-size:{78 if lang == 'ar' else 74}px; line-height:1.3; color:#fff; padding:44px 50px;
+  -webkit-text-stroke:3px rgba(0,0,0,.9); paint-order:stroke fill;
+  text-shadow:0 3px 8px rgba(0,0,0,.6); }}
+.cap .en {{ font-family: '{LATIN}', sans-serif; font-weight:700; font-size:{'.9em' if lang == 'ar' else '1em'}; }}
 .cap .kw {{ color: {YELLOW}; }}
 .cap .big {{ font-size: 1.6em; line-height: 1; }}
 .cap .big .en, .cap .en .big {{ font-size: inherit; }}

@@ -3,7 +3,7 @@
 edit.py contract (Claude writes one per video, in the video's work dir):
     VIDEO        absolute path to the raw vertical video
     CAPTIONS     [(start_seconds, "caption text"), ...]  each holds until the next starts
-                 *word* = yellow. Optional third item, a style dict (the moving-caption style, 27 Oct 2026):
+                 Plain 3-4 word phrases by default. Explicit legacy *word* highlighting remains supported. Optional third item, a style dict (the moving-caption style, 27 Oct 2026):
                  {"y": centre y, "x": centre x, "scale": size multiplier}; {word} inside the text = a big word
     VISUALS      {"id": overlay(...) | split(...) | full(...) | broll(...)}
     TIMELINE     [("id", start, end), ...]  later entries draw on top of earlier ones
@@ -18,8 +18,7 @@ edit.py contract (Claude writes one per video, in the video's work dir):
                    "out"  eases back to normal over the window (the realization after it)
                  PUNCH stays the hard zoom on an emphasis line, and works on top of these
     ZOOM_LEVEL   how far an eased zoom goes, default 1.15
-    RISER        play assets/sfx/riser-hook.wav under the "hook" zoom, ending as it ends. Default True
-                 when a "hook" zoom exists
+    RISER        play assets/sfx/riser-hook.wav under the "hook" zoom, ending as it ends. Default False; set True only for a chosen sound cue
     RISER_GAIN_DB riser level, default -6: its peak sits about 10 dB under the voice at -14 LUFS
     OUTPUT       default "<video stem> - edited.mp4" next to the video
     YOUTUBE_END  seconds: where the YouTube copy ends, 0.3s after the last word before a DM keyword ask
@@ -64,7 +63,7 @@ def load(workdir):
     if bad:
         raise SystemExit(f'ZOOM entries must be (start, end, "hook" | "in" | "out") with end > start: {bad}')
     p.zoom_level = getattr(m, "ZOOM_LEVEL", 1.15)
-    p.riser = getattr(m, "RISER", any(k == "hook" for _, _, k in p.zoom))
+    p.riser = getattr(m, "RISER", False)
     p.riser_gain_db = getattr(m, "RISER_GAIN_DB", -6)
     p.quality = getattr(m, "QUALITY", "default")
     fp = getattr(m, "FACE_PIP", None)

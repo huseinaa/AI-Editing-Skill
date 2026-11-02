@@ -42,7 +42,7 @@ The user iterates on the result ("make the list slower", "change the hook"), whi
    caption language, browser. Every graphic and cover reads it. If it still has the default values
    and the user has a brand, ask once for their colors, fonts and logo and fill it in.
 2. Read `STYLES.md` (the five styles and the visual idea bank) and `deltas.md` if it exists (what the
-   user corrected in past edits).
+   user corrected in past edits). Read [reference lessons](references/natural-editing.md), including the complete 15-rule coverage table. These current defaults supersede older card/effect preferences.
 3. If the user keeps a script or notes for this reel (a doc, a note, a pasted script), read it: it
    gives the order of the takes, the spelling of their words, the text hook and where B-roll goes.
 
@@ -73,8 +73,9 @@ last, measured by loudness (20 ms windows, loud = within 24 dB of the take's pea
 transcript. A short pause inside a take stays, especially the small breaths between the items of a
 spoken list: they are the rhythm. Only cut inside a take for a retake (a sentence said twice: keep
 the last complete one), a false start, or a long pause of a second or more (a single-take list reel
-with 1 to 3 s between points). Then look at the frames around every join in 0.1 s steps and move a
-cut in if a hand reaches for the phone.
+with 1 to 3 s between points). **Never cut inside a sentence:** people slow down on purpose to be clear,
+and a cut there clips words. A pause under a second is not dead space. Then look at the frames around every join in 0.1 s steps and move a
+cut in if a hand reaches for the phone. Tone determines whether a gap carries thought or emotion: do not remove it just to hit a timing target. Never sacrifice a complete word or sentence for speed.
 
 **The very end keeps 0.3 s after the last word**, so the word finishes. assemble.py does this by
 itself and prints `end tail:`.
@@ -93,48 +94,54 @@ assemble, then `python S/retime.py <workdir> <old takes.json>` moves every time 
 
 People change wording on camera. **The transcript is the truth, the script is a spelling guide.**
 
-- 4 to 5 words per chunk, **one line**. Every chunk starts on a word's start time.
-- Arabic: Arabic letters, English terms stay Latin (app, AI, UI...).
+- 3 to 4 words per natural phrase, **one line**; shorter at phrase endings. Every chunk starts on a word's start time. Stationary white text, weight 700, 3px dark outline on the 1440 master and a subtle shadow. Direct replacement, no fades, bouncing, or colored words by default.
+- Arabic: Arabic letters, English terms stay Latin (app, AI, UI...). Keep numbers, separators, currency and percentages in LTR runs. Show monetary amounts in full (for example `$5,000`, not `$5K`) when the spoken amount is known; never invent precision.
+- Use the configured fonts from `brand.json` (defaults: Tajawal for Arabic and Inter for Latin).
 - Where a word is unclear, re-decode that stretch, pick the most likely, and **list it** in the
   report with its timestamp. Never silently guess.
 
 ## Step 3: Style, hook, beat plan, zooms
 
 1. **Style** in one line, using the tree in `STYLES.md`.
-2. **Hook.** 7 words max, one highlighted word, complementing (not repeating) the first spoken line.
+2. **Hook.** 7 words max, at most two lines, plain white outlined text without a box or highlight block, complementing (not repeating) the first spoken line.
    Write 3, use the best, list the other two.
 3. **Beat plan.** Walk the transcript line by line and pick a visual from the idea bank. Every visual
-   starts on the word that triggers it. Lists build item by item. Face on punchlines. Density check.
-4. **Zooms** (talking heads): a `"hook"` zoom over the spoken hook with the riser, at most one
-   `"in"`/`"out"` pair on a reflective line and its realization, and `PUNCH` hard zooms on emphasis
-   lines (no closer than ~4 s, never two in a row). Never zoom a stretch covered by a full screen or
-   split panel.
+   starts on the word that triggers it. Prefer an actual example for each named item. Face on punchlines. Check each visual has a purpose; no density quota.
+4. **Optional zooms:** keep the baseline calm. Use a hook zoom, reflective in/out pair, or emphasis
+   punch-in only when the delivery benefits or the user explicitly requests it. No scheduled
+   punch-ins or automatic hook effects. `RISER` defaults to False; choose it separately. Zooms
+   stay on the face, never under a full screen, split, or B-roll window.
 
 ## Step 4: Write edit.py
 
-Copy `examples/ui-ux-explanation/edit.py` as the template. Set `VIDEO` to `<workdir>/master.mp4` and
+Use `examples/ui-ux-explanation/edit.py` for the project contract, replacing its historical caption lengths and dense graphic choices with the current defaults. Set `VIDEO` to `<workdir>/master.mp4` and
 `OUTPUT` to `<reel folder>/<folder name> - edited.mp4`. The contract is at the top of
 `scripts/reel_edit/project.py`, the components are in `scripts/reel_edit/components.py`. Use the
 components before writing new HTML, and build anything new from the same tokens.
 
-- **A list reel** ("7 signs...", "5 rules..."): `examples/list-reel/edit.py`. The number in the title
-  is the number of points actually said.
+- **A list reel:** show real examples on the words naming them; use a minimal progressive list for abstract steps. `examples/list-reel/edit.py` is an optional historical layout, not a mandatory dashboard. Count the points actually said for the title.
 - **A clip you react to:** `broll(path, mode="bottom")`, whole and uncropped, under the face. Talking
   over it: muted. Watching it then speaking: `audio=True`.
-- **Images that pop in** (examples you describe but didn't film): `broll("<image>.png", mode="bottom")`,
+- **Real images or clearly hypothetical illustrations:** `broll("<image>.png", mode="bottom")`,
   or an `overlay()` with an `<img>` for a transparent sticker.
 - **Full screens with your face in a small circle:** `FACE_PIP` as a list of windows, each
-  `{"crop": square, "box": (x, y, 300, 300), "window": (s, e), "shape": "circle"}`, and the captions
-  in those windows styled `{"y": 1830}` so they sit under the circle.
-- **Moving captions** (an optional style): `(start, "text", {"y": .., "x": .., "scale": ..})` per
+  `{"crop": square, "box": (500, 1360, 440, 440), "window": (s, e), "shape": "circle"}`, and the
+  captions in those windows styled `{"y": 1855}` so they sit under the circle. Crop a square around the
+  whole head (hair to chin, with air), so nothing is cut off. Add `"ring": True` for a white ring.
+- **Moving captions** (legacy opt-in, only when explicitly requested): `(start, "text", {"y": .., "x": .., "scale": ..})` per
   caption, `{word}` in the text draws that word big.
 - **Private details on screen** (emails, keys): `BLUR = [(start, end, (x, y, w, h))]`.
 
 Hard layout rules the renderer does not enforce:
 - Everything inside the safe box: x 90 to 1350, y 360 to 1920 on the 1440x2560 master.
-- No card covers the eyes. Cards sit from y 260, above the head; a tall card moves up or shrinks.
+- Text helpers begin at y 372, inside the safe box, above the face. Shorten or reduce text that approaches the eyes or mouth; never move it above y 360. Check the whole thought, including face movement.
+- Hooks, takeaways, and text CTAs are plain white outlined text at weight 800, without cards, pills, badges, buttons, or highlight blocks. Their helper names remain compatible. Custom text: `overlay(html, top=372, motion="cut")` with `text-overlay` CSS. Graphic overlays retain `motion="ease"`.
 - Split panel content ends by ~560 px (the caption sits in the panel at y 1845).
-- One highlight-color element per visual. The error color only for broken or wrong states.
+- Plain top text and captions stay white. In explanatory diagrams only, at most one highlight-color accent; error color only for wrong states. No decorative emoji.
+- Show actual apps, articles, files and receipts as evidence. A file should be recognizable by its actual filename/extension or preview. Never generate fake screenshots, testimonials, receipts, or results. If an asset is missing, stay on the face and report it.
+- Match B-roll to what is said and when it is said. A generic checklist is not a substitute for footage of a named thing.
+- Check the intended platform's UI/crop at delivery; the existing safe box is a baseline, not proof that every TikTok or Shorts overlay clears every device.
+- Voice remains dominant over any supplied music/effects. Do not add background music automatically or copy the reference's volume percentages universally.
 - Consecutive states of one graphic keep shared elements in the same place, or the crossfade ghosts.
 - A visual that starts at 0 is there on frame one (no fade in).
 
@@ -183,7 +190,7 @@ skipped or assumed, the takes used and any dropped.
 
 When the user corrects an edit: fix it, then add the lesson to `deltas.md` in this folder (date,
 reel, what they said, the rule it implies). The second time the same lesson comes up, write it into
-this file as a rule. One correction is a preference, two is a rule.
+this file as a rule. Explicit instructions to update the skill apply immediately; the repeat rule only concerns inferred preferences.
 
 ## Setup notes
 

@@ -23,7 +23,8 @@ def wrap(text):
     text = re.sub(r"\*([^*]+)\*", lambda m: "\x00" + m.group(1) + "\x01", text)
     if p.lang == "ar":
         # apostrophes belong inside the English run, or "you're" splits into "re ... 'you"
-        text = re.sub(r"([A-Za-z0-9\x00][A-Za-z0-9/ .\-'’\x00\x01]*[A-Za-z0-9\x01]|[A-Za-z0-9])", r'<bdi class="en">\1</bdi>', text)
+        # commas and $ € % stay inside the run, or "5,000" splits and an RTL line shows "000,5"
+        text = re.sub(r"([A-Za-z0-9$€\x00][A-Za-z0-9/ .,%\-'’\x00\x01]*[A-Za-z0-9%\x01]|[A-Za-z0-9])", r'<bdi class="en" dir="ltr">\1</bdi>', text)
     text = text.replace("\x00", '<span class="kw">').replace("\x01", "</span>")
     return re.sub(r"\{([^}]+)\}", r'<span class="big">\1</span>', text)   # {word} = a big word (moving-caption style)
 
