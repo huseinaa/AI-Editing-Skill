@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cut editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --blue:#0051BD; --blue2:#2F6BFF; --ink:#0d1b2a; --mute:#5b6b80; --line:#dbe4f0; --bg:#f4f7fc; --card:#fff; --red:#e5484d; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.4 Inter, "Segoe UI", system-ui, sans-serif;
+         display: flex; flex-direction: column; overflow: hidden; user-select: none; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0 10px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 6px 11px; border-radius: 8px; cursor: pointer; }
+  button:hover { border-color: var(--blue2); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.on { background: #e6efff; border-color: var(--blue2); color: var(--blue); font-weight: 600; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+  button kbd { font: 11px ui-monospace, Consolas, monospace; color: var(--mute); margin-left: 5px; }
+  button.primary kbd, button.on kbd { color: inherit; opacity: .7; }
+  .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+  .grow { flex: 1; }
+  #time { font: 13px ui-monospace, Consolas, monospace; color: var(--mute); white-space: nowrap; }
+  #saved { font-size: 12px; color: var(--mute); min-width: 52px; text-align: right; }
+  main { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px; }
+  #mon { position: relative; background: #000; aspect-ratio: 9 / 16; height: 100%; max-width: 100%; overflow: hidden; border-radius: 8px;
+         box-shadow: 0 10px 30px rgba(0, 81, 189, .15); }
+  #scr { position: absolute; inset: 0; transform-origin: 0 0; }
+  #scr video, #still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+  #still { display: none; }
+  #bub { position: absolute; border-radius: 50%; overflow: hidden; background: #111; }
+  #bub video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #note { position: absolute; top: 8px; left: 8px; background: rgba(13, 27, 42, .78); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 6px; display: none; }
+  #tlwrap { background: var(--card); border-top: 1px solid var(--line); padding: 0 0 2px; }
+  #tl { display: block; width: 100%; height: 206px; cursor: default; }
+  #hs { overflow-x: scroll; overflow-y: hidden; height: 14px; }
+  #hs div { height: 1px; }
+  footer { font-size: 12px; color: var(--mute); padding: 5px 14px 7px; background: var(--card); display: flex; gap: 16px; flex-wrap: wrap; }
+  footer b { color: var(--ink); font-weight: 600; }
+  #toast { position: fixed; left: 50%; bottom: 280px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 7px 14px;
+           border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: .95; }
+  #exp { position: fixed; inset: 0; background: rgba(13, 27, 42, .45); display: none; align-items: center; justify-content: center; }
+  #exp > div { background: var(--card); border-radius: 12px; padding: 22px 26px; width: min(560px, 90vw); user-select: text; }
+  #exp h2 { margin: 0 0 8px; font-size: 16px; }
+  #explog { font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--mute); white-space: pre-wrap; word-break: break-all; min-height: 60px; }
+  #expout { font-weight: 600; margin: 10px 0; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="name">Cut editor</h1>
+  <button id="bplay">Play<kbd>Space</kbd></button>
+  <button id="bsplit">Split<kbd>S</kbd></button>
+  <button id="bdel">Delete<kbd>Del</kbd></button>
+  <div class="sep"></div>
+  <button id="blink" class="on" disabled title="Picture and voice stay together for reel cuts.">Linked picture + voice</button>
+  <button id="bsnap" class="on" disabled title="Trims and deletions close the gap.">Ripple cuts</button>
+  <div class="sep"></div>
+  <button id="bundo">Undo</button>
+  <button id="bredo">Redo</button>
+  <button id="bfit">Fit</button>
+  <button id="breset" title="Throw away your changes and start again from the AI's cut">Back to AI cut</button>
+  <div class="grow"></div>
+  <span id="time"></span>
+  <span id="saved"></span>
+  <button id="bexport" class="primary">Export</button>
+</header>
+<main>
+  <div id="mon">
+    <div id="scr"><video id="s0" muted playsinline preload="auto"></video><video id="s1" muted playsinline preload="auto"></video></div>
+    <img id="still" alt="">
+    <div id="bub"><video id="v0" playsinline preload="auto"></video><video id="v1" playsinline preload="auto"></video></div>
+    <div id="note"></div>
+  </div>
+</main>
+<div id="tlwrap">
+  <canvas id="tl"></canvas>
+  <div id="hs"><div></div></div>
+</div>
+<footer>
+  <span><b>Click</b> a clip to select; drag its <b>edge</b> to trim. Pull outward to restore footage.</span>
+  <span>Restored footage uses the raw take. Existing graphics stay attached to the footage they illustrate.</span>
+  <span><b>← →</b> one frame, with <b>Shift</b> one second</span>
+  <span><b>↑ ↓</b> previous / next cut</span>
+  <span><b>, .</b> slide the footage inside the selected clip by one frame</span>
+  <span><b>Wheel</b> zoom, <b>Shift + wheel</b> scroll</span>
+  <span><b>Ctrl+Z</b> undo</span>
+</footer>
+<div id="toast"></div>
+<div id="exp"><div>
+  <h2 id="exptitle">Exporting</h2>
+  <div id="explog"></div>
+  <div id="expout"></div>
+  <button id="expclose" style="display:none">Close</button>
+</div></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const FPS = 30, RULER = 24, LANE_S = { y: 30, h: 58 }, LANE_V = { y: 96, h: 104 };
+const LANES = { screen: LANE_S, voice: LANE_V };
+const TAKE_FILL = ["#dbe8ff", "#d9f2ec", "#ece2ff", "#ffe9d6", "#dff0ff", "#e6f4d7", "#ffe0ea"];
+const TAKE_EDGE = ["#2F6BFF", "#16a085", "#7c4dff", "#e67e22", "#0284c7", "#5a9e1c", "#d6336c"];
+
+let P, clipBy = {}, phrasesBy = {}, tl, nextId = 1;
+let sel = null, activeLane = null, playhead = 0, playing = false, link = true, snap = true;
+let ppf = 1, scrollX = 0, undoStack = [], redoStack = [], dirty = true, drag = null, hover = null;
+let clock = { t0: 0, f0: 0 }, saveTimer = null;
+
+const other = l => l === "voice" ? "screen" : "voice";
+const end = i => i.at + i.len;
+const clone = o => JSON.parse(JSON.stringify(o));
+const total = () => Math.max(0, ...tl.lanes.voice.map(end), ...tl.lanes.screen.map(end));
+const itemAt = (l, f) => tl.lanes[l].find(i => i.at <= f && f < end(i));
+const byId = (l, id) => tl.lanes[l].find(i => i.id === id);
+const sortLane = l => tl.lanes[l].sort((a, b) => a.at - b.at);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = f => { const s = f / FPS, m = Math.floor(s / 60); return `${String(m).padStart(2, "0")}:${(s - m * 60).toFixed(2).padStart(5, "0")}`; };
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+
+// ---------- the timeline model ----------
+function load(timeline) {
+  tl = clone(timeline);
+  for (const l of ["voice", "screen"]) { tl.lanes[l].forEach(i => i.id = nextId++); sortLane(l); }
+}
+function plain() {
+  const strip = l => tl.lanes[l].map(i => ({ clip: i.clip, src: Math.round(i.src * 1e4) / 1e4, len: Math.round(i.len), at: Math.round(i.at) }));
+  return { fps: FPS, lanes: { voice: strip("voice"), screen: strip("screen") } };
+}
+function save() {
+  $("saved").textContent = "saving";
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 350);
+}
+async function flush() {
+  clearTimeout(saveTimer);
+  try {
+    const response = await fetch("/api/save", { method: "POST", body: JSON.stringify(plain()) });
+    if (!response.ok) throw new Error((await response.json()).error || "Could not save");
+    $("saved").textContent = "saved";
+    return true;
+  } catch (e) { $("saved").textContent = "NOT SAVED"; toast(e.message); return false; }
+}
+// every change goes through here, so it can be undone and is saved
+function edit(fn) {
+  const before = clone(tl);
+  fn();
+  sortLane("voice"); sortLane("screen");
+  undoStack.push(before); if (undoStack.length > 300) undoStack.shift();
+  redoStack = [];
+  playhead = clamp(playhead, 0, Math.max(total() - 1, 0));
+  dirty = true; save();
+}
+function undo() { if (!undoStack.length) return; redoStack.push(clone(tl)); tl = undoStack.pop(); sel = null; dirty = true; save(); }
+function redo() { if (!redoStack.length) return; undoStack.push(clone(tl)); tl = redoStack.pop(); sel = null; dirty = true; save(); }
+
+// how far an edge can still be pulled outward before the take runs out, in frames
+const roomLeft = i => Math.floor(i.src * FPS + 1e-6);
+const roomRight = i => Math.floor((clipBy[i.clip].duration - i.src) * FPS - i.len + 1e-6);
+
+function splitLane(l, f) {
+  const i = itemAt(l, f);
+  if (!i || f <= i.at) return false;
+  const k = f - i.at;
+  tl.lanes[l].push({ id: nextId++, clip: i.clip, src: i.src + k / FPS, len: i.len - k, at: f });
+  i.len = k; sortLane(l);
+  return true;
+}
+function removeRange(l, a, b, ripple) {
+  splitLane(l, a); splitLane(l, b);
+  tl.lanes[l] = tl.lanes[l].filter(i => !(i.at >= a && end(i) <= b));
+  if (ripple) tl.lanes[l].forEach(i => { if (i.at >= b) i.at -= b - a; });
+}
+function doSplit() {
+  const lanes = link || !activeLane ? ["voice", "screen"] : [activeLane];
+  if (!lanes.some(l => { const i = itemAt(l, playhead); return i && playhead > i.at; })) return toast("Nothing to split under the playhead");
+  edit(() => lanes.forEach(l => splitLane(l, playhead)));
+}
+function doDelete() {
+  if (!sel) return toast("Click a clip first");
+  const x = byId(sel.lane, sel.id); if (!x) return;
+  const a = x.at, b = end(x), lanes = link ? ["voice", "screen"] : [sel.lane];
+  edit(() => lanes.forEach(l => removeRange(l, a, b, snap)));
+  sel = null; playhead = clamp(a, 0, Math.max(total() - 1, 0));
+}
+function doSlip(k) {
+  if (!sel) return toast("Click a clip first");
+  const x = byId(sel.lane, sel.id); if (!x) return;
+  const group = [x];
+  if (link) { const y = tl.lanes[other(sel.lane)].find(i => i.at === x.at && i.len === x.len); if (y) group.push(y); }
+  if (group.some(i => (k < 0 ? roomLeft(i) : roomRight(i)) < 1)) return toast("The take ends here");
+  edit(() => group.forEach(i => i.src += k / FPS));
+}
+function neighbours(l, i) {
+  const lane = tl.lanes[l], n = lane.indexOf(i);
+  return { prev: n > 0 ? end(lane[n - 1]) : 0, next: n < lane.length - 1 ? lane[n + 1].at : Infinity };
+}
+
+// ---------- dragging: trim an edge, or move a clip ----------
+// Every mouse move starts again from the timeline as it was on mouse down, so a drag can
+// never pile up rounding or half-applied steps.
+function applyTrim(d) {       // d frames, + = outward (the clip gets longer)
+  tl = clone(drag.base);
+  const x = byId(drag.lane, drag.id), ol = other(drag.lane), left = drag.side === "L";
+  const y = link ? tl.lanes[ol].find(i => left ? i.at === x.at : end(i) === end(x)) : null;
+  const group = [[drag.lane, x]].concat(y ? [[ol, y]] : []);
+  let lo = -Infinity, hi = Infinity;
+  for (const [l, i] of group) {
+    lo = Math.max(lo, -(i.len - 1));
+    hi = Math.min(hi, left ? roomLeft(i) : roomRight(i));
+    if (!snap) { const nb = neighbours(l, i); hi = Math.min(hi, left ? i.at - nb.prev : nb.next - end(i)); }
+  }
+  if (snap) {                 // click to where the playhead was when the drag started
+    const need = left ? x.at - drag.head0 : drag.head0 - end(x);
+    if (need !== 0 && Math.abs(need - d) * ppf < 8) d = need;
+  }
+  d = clamp(Math.round(d), lo, hi);
+  for (const [l, i] of group) {
+    const oldEnd = end(i);
+    if (left) { i.src -= d / FPS; i.len += d; if (!snap) i.at -= d; }
+    else i.len += d;
+    if (snap) tl.lanes[l].forEach(j => { if (j !== i && j.at >= oldEnd) j.at += d; });
+  }
+  drag.changed = d !== 0;
+  drag.unlinked = link && !y;
+  // show the frame the cut now lands on
+  playhead = left ? x.at : end(x) - 1;
+  dirty = true;
+}
+function applyMove(d) {
+  // This is a cut reviewer. Keeping clip positions contiguous avoids hidden gaps.
+  drag.changed = false;
+}
+
+// ---------- the canvas ----------
+const cv = $("tl"), cx = cv.getContext("2d");
+const xOf = f => f * ppf - scrollX, fOf = x => (x + scrollX) / ppf;
+function setZoom(z, anchorX) {
+  const w = cv.clientWidth, f = fOf(anchorX ?? w / 2);
+  ppf = clamp(z, Math.min(0.02, (w - 40) / Math.max(total(), 1)), 24);
+  setScroll(f * ppf - (anchorX ?? w / 2));
+}
+function setScroll(x) {
+  const w = cv.clientWidth, width = total() * ppf + w * 0.5;
+  $("hs").firstElementChild.style.width = width + "px";
+  scrollX = clamp(x, 0, Math.max(width - w, 0));
+  $("hs").scrollLeft = scrollX;
+  dirty = true;
+}
+function fit() { ppf = (cv.clientWidth - 40) / Math.max(total(), 1); setScroll(0); }
+
+function hit(mx, my) {
+  for (const l of ["screen", "voice"]) {
+    const L = LANES[l];
+    if (my < L.y || my > L.y + L.h) continue;
+    const f = fOf(mx), i = tl.lanes[l].find(i => i.at <= f && f < end(i));
+    if (!i) return { lane: l };
+    const x0 = xOf(i.at), x1 = xOf(end(i)), grab = Math.min(7, (x1 - x0) / 3);
+    return { lane: l, item: i, side: mx - x0 <= grab ? "L" : x1 - mx <= grab ? "R" : null };
+  }
+  return my < RULER ? { ruler: true } : {};
+}
+
+function rr(x, y, w, h, r) { cx.beginPath(); cx.roundRect(x, y, Math.max(w, 1), h, Math.min(r, Math.max(w, 1) / 2)); }
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cx.clearRect(0, 0, w, h);
+  // ruler
+  cx.fillStyle = "#f4f7fc"; cx.fillRect(0, 0, w, RULER);
+  const steps = [1 / 30, 1 / 6, 0.5, 1, 2, 5, 10, 30, 60, 120, 300], step = steps.find(s => s * FPS * ppf >= 70) || 600;
+  cx.fillStyle = "#5b6b80"; cx.strokeStyle = "#c7d3e3"; cx.font = "11px ui-monospace, Consolas, monospace"; cx.textAlign = "left"; cx.direction = "ltr";
+  for (let s = Math.floor(fOf(0) / FPS / step) * step; s * FPS * ppf - scrollX < w; s += step) {
+    const x = Math.round(xOf(s * FPS)) + .5;
+    if (x < 0) continue;
+    cx.beginPath(); cx.moveTo(x, RULER - 7); cx.lineTo(x, RULER); cx.stroke();
+    const m = Math.floor(s / 60 + 1e-9), r = s - m * 60;
+    cx.fillText(step < 1 ? `${m}:${r.toFixed(2).padStart(5, "0")}` : `${m}:${String(Math.round(r)).padStart(2, "0")}`, x + 3, 13);
+  }
+  // lane backgrounds and names
+  for (const [l, L] of Object.entries(LANES)) { cx.fillStyle = "#eef3fa"; cx.fillRect(0, L.y, w, L.h); }
+  const pk = P.peaks, pps = pk.per_second;
+  for (const l of ["screen", "voice"]) {
+    const L = LANES[l];
+    for (const i of tl.lanes[l]) {
+      const x0 = xOf(i.at), x1 = xOf(end(i));
+      if (x1 < 0 || x0 > w) continue;
+      const take = clipBy[i.clip].take, on = sel && sel.id === i.id;
+      rr(x0 + .5, L.y + 1.5, x1 - x0 - 1, L.h - 3, 5);
+      cx.fillStyle = TAKE_FILL[(take - 1) % TAKE_FILL.length]; cx.fill();
+      cx.save(); cx.clip();
+      const a = Math.max(x0, 0), b = Math.min(x1, w);
+      if (l === "voice") {
+        // the waveform
+        const peaks = pk.clips[i.clip] || [], mid = L.y + 38, amp = 32;
+        cx.fillStyle = TAKE_EDGE[(take - 1) % TAKE_EDGE.length];
+        for (let x = Math.floor(a); x < b; x++) {
+          const t0 = i.src + (fOf(x) - i.at) / FPS, t1 = t0 + 1 / ppf / FPS;
+          let v = 0;
+          for (let k = Math.max(Math.floor(t0 * pps), 0), ke = Math.max(Math.ceil(t1 * pps), k + 1); k < ke && k < peaks.length; k++) v = Math.max(v, peaks[k]);
+          const hh = Math.max(v / 255 * amp, .5);
+          cx.fillRect(x, mid - hh, 1, hh * 2);
+        }
+        // what he says, under the waveform
+        cx.font = "12px 'Segoe UI', Tahoma, sans-serif"; cx.fillStyle = "#0d1b2a";
+        const ts = i.src, te = i.src + i.len / FPS;
+        for (const p of phrasesBy[i.clip] || []) {
+          if (p.e <= ts || p.s >= te || !p.text) continue;
+          const px0 = Math.max(xOf(i.at + (Math.max(p.s, ts) - i.src) * FPS), x0), px1 = Math.min(xOf(i.at + (Math.min(p.e, te) - i.src) * FPS), x1);
+          if (px1 - px0 < 34 || px1 < 0 || px0 > w) continue;
+          cx.save(); cx.beginPath(); cx.rect(px0 + 2, L.y + 74, px1 - px0 - 6, 26); cx.clip();
+          cx.fillStyle = "#c7d3e3"; cx.fillRect(px0 + 2, L.y + 76, 1, 20);
+          cx.fillStyle = "#0d1b2a"; cx.fillText(p.text, px0 + 7, L.y + 91);
+          cx.restore();
+        }
+      } else {
+        // where a lecture slide is on screen
+        for (const sp of P.slides[i.clip] || []) {
+          const ts = i.src, te = i.src + i.len / FPS;
+          if (sp.e <= ts || sp.s >= te) continue;
+          const sx0 = xOf(i.at + (Math.max(sp.s, ts) - i.src) * FPS), sx1 = xOf(i.at + (Math.min(sp.e, te) - i.src) * FPS);
+          cx.fillStyle = sp.show === "still" ? "rgba(230,126,34,.30)" : "rgba(0,81,189,.16)";
+          cx.fillRect(sx0, L.y + L.h - 20, sx1 - sx0, 17);
+          if (sx1 - sx0 > 42) { cx.fillStyle = "#0d1b2a"; cx.font = "11px 'Segoe UI', sans-serif"; cx.fillText((sp.show === "still" ? "clean " : "slide ") + (sp.label || ""), Math.max(sx0, a) + 5, L.y + L.h - 7); }
+        }
+      }
+      if (x1 - x0 > 60) {
+        cx.font = "600 11px 'Segoe UI', sans-serif"; cx.fillStyle = TAKE_EDGE[(take - 1) % TAKE_EDGE.length];
+        cx.fillText(`take ${take} · ${fmt(Math.round(i.src * FPS))}`, Math.max(x0, 0) + 7, L.y + 14);
+      }
+      cx.restore();
+      rr(x0 + .5, L.y + 1.5, x1 - x0 - 1, L.h - 3, 5);
+      cx.lineWidth = on ? 2.5 : 1; cx.strokeStyle = on ? "#0051BD" : TAKE_EDGE[(take - 1) % TAKE_EDGE.length] + "88"; cx.stroke(); cx.lineWidth = 1;
+      if (hover && hover.item && hover.item.id === i.id && hover.side) {
+        cx.fillStyle = "#0051BD"; cx.fillRect(hover.side === "L" ? x0 : x1 - 4, L.y + 2, 4, L.h - 4);
+      }
+    }
+    cx.font = "600 11px 'Segoe UI', sans-serif"; cx.textAlign = "right";
+    cx.fillStyle = "rgba(255,255,255,.85)"; const label = l === "voice" ? "VOICE" : "PICTURE", lw = cx.measureText(label).width + 12;
+    cx.fillRect(w - lw - 4, L.y + 3, lw, 16); cx.fillStyle = (!link && activeLane === l) ? "#0051BD" : "#5b6b80"; cx.fillText(label, w - 10, L.y + 15); cx.textAlign = "left";
+  }
+  // playhead
+  const px = Math.round(xOf(playhead)) + .5;
+  cx.strokeStyle = "#e5484d"; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(px, 0); cx.lineTo(px, h); cx.stroke();
+  cx.fillStyle = "#e5484d"; cx.beginPath(); cx.moveTo(px - 6, 0); cx.lineTo(px + 6, 0); cx.lineTo(px, 9); cx.closePath(); cx.fill(); cx.lineWidth = 1;
+  $("time").textContent = `${fmt(Math.round(playhead))} / ${fmt(total())}`;
+  $("bundo").disabled = !undoStack.length; $("bredo").disabled = !redoStack.length;
+}
+
+cv.addEventListener("mousedown", e => {
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, h = hit(mx, my);
+  if (playing) pause();
+  if (h.item) {
+    sel = { lane: h.lane, id: h.item.id }; activeLane = h.lane;
+    drag = { kind: h.side ? "trim" : "move", side: h.side, lane: h.lane, id: h.item.id, x0: mx, base: clone(tl), head0: playhead, moved: false, changed: false };
+    if (!h.side) playhead = clamp(Math.round(fOf(mx)), 0, Math.max(total() - 1, 0));
+  } else {
+    if (h.lane) activeLane = h.lane;
+    sel = null;
+    drag = { kind: "scrub" };
+    playhead = clamp(Math.round(fOf(mx)), 0, Math.max(total() - 1, 0));
+  }
+  dirty = true;
+});
+window.addEventListener("mousemove", e => {
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (!drag) {
+    const h = e.target === cv ? hit(mx, my) : null;
+    cv.style.cursor = h && h.item ? (h.side ? "ew-resize" : "grab") : "default";
+    if (JSON.stringify([hover && hover.item && hover.item.id, hover && hover.side]) !== JSON.stringify([h && h.item && h.item.id, h && h.side])) { hover = h; dirty = true; }
+    return;
+  }
+  if (drag.kind === "scrub") { playhead = clamp(Math.round(fOf(mx)), 0, Math.max(total() - 1, 0)); dirty = true; return; }
+  const dpx = mx - drag.x0;
+  if (!drag.moved && Math.abs(dpx) < 4) return;
+  drag.moved = true;
+  if (drag.kind === "trim") applyTrim((drag.side === "L" ? -dpx : dpx) / ppf);
+  else applyMove(dpx / ppf);
+});
+window.addEventListener("mouseup", () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.kind !== "scrub" && d.moved) {
+    if (d.changed) {
+      sortLane("voice"); sortLane("screen");
+      undoStack.push(d.base); redoStack = []; save();
+      if (d.unlinked && d.kind === "trim") toast("The other lane has no cut at this spot, so only this lane changed");
+    } else tl = d.base;
+    if (d.kind === "move") playhead = d.head0;
+  }
+  dirty = true;
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) setScroll(scrollX + (e.deltaX || e.deltaY));
+  else setZoom(ppf * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - r.left);
+}, { passive: false });
+$("hs").addEventListener("scroll", () => { if (Math.abs($("hs").scrollLeft - scrollX) > 1) { scrollX = $("hs").scrollLeft; dirty = true; } });
+window.addEventListener("resize", () => { dirty = true; layoutBubble(); });
+
+// ---------- the monitor ----------
+// Each lane has two video elements. While one plays, the other is parked on the first frame
+// after the next cut, so the picture changes hands at the cut without waiting for a seek.
+class Player {
+  constructor(lane, kind, els) { this.lane = lane; this.kind = kind; this.els = els; this.cur = 0; els.forEach(e => { e._clip = null; e._target = -1; }); this.show(); }
+  show() { this.els.forEach((e, n) => e.style.visibility = n === this.cur ? "visible" : "hidden"); }
+  aim(el, clip, t) {
+    if (el._clip !== clip) { el.src = `/media/${clip}.${this.kind}.mp4`; el._clip = clip; el._target = -1; }
+    if (Math.abs(el._target - t) > 1e-4) { el.currentTime = t; el._target = t; }
+  }
+  sync(T, play) {
+    const lane = tl.lanes[this.lane], it = lane.find(i => i.at <= T && T < end(i));
+    let el = this.els[this.cur], ot = this.els[1 - this.cur];
+    if (!it) { this.els.forEach(e => { if (!e.paused) e.pause(); }); return null; }
+    const off = this.lane === "screen" ? clipBy[it.clip].screen_offset : 0;
+    const want = Math.max(it.src + (T - it.at) / FPS + off, 0);
+    if (!play) {
+      this.els.forEach(e => { if (!e.paused) e.pause(); });
+      this.aim(el, it.clip, want + 0.004);
+      return it;
+    }
+    const good = e => e._clip === it.clip && Math.abs(e.currentTime - want) < 0.13;
+    if (!(good(el) && !el.seeking)) {
+      if (good(ot) && ot.readyState >= 2) { this.cur = 1 - this.cur; [el, ot] = [ot, el]; this.show(); }
+      else if (el._clip !== it.clip || !el.seeking || Math.abs(el._target - want) > 0.35) this.aim(el, it.clip, want);
+    }
+    if (el.paused && !el.seeking) { el._target = -1; el.play().catch(() => {}); }
+    if (!ot.paused) ot.pause();
+    // park the other element on the frame after the next cut
+    const nx = lane[lane.indexOf(it) + 1];
+    if (nx && nx.at - T < 3 * FPS) {
+      const jump = nx.clip !== it.clip || Math.abs(nx.src - (it.src + it.len / FPS)) > 0.01 || nx.at !== end(it);
+      const tgt = Math.max(nx.src + (this.lane === "screen" ? clipBy[nx.clip].screen_offset : 0), 0);
+      if (jump && (ot._clip !== nx.clip || Math.abs(ot._target - tgt) > 1e-4)) this.aim(ot, nx.clip, tgt);
+    }
+    return it;
+  }
+}
+let screenP, voiceP;
+function layoutBubble() {
+  $("bub").style.visibility = "hidden";
+}
+function monitor(T, play) {
+  const si = screenP.sync(T, play), vi = voiceP.sync(T, play);
+  $("bub").style.display = vi ? "block" : "none";
+  let span = null, note = "";
+  if (si) {
+    const t = si.src + (T - si.at) / FPS;
+    span = (P.slides[si.clip] || []).find(s => s.s <= t && t < s.e);
+  } else note = "no screen clip here: the last frame is held";
+  if (!vi) note = note ? "nothing here" : "no face or voice here: silent";
+  const scr = $("scr"), still = $("still");
+  if (span && span.show === "still" && span.still) { if (still.dataset.src !== span.still) { still.src = span.still; still.dataset.src = span.still; } still.style.display = "block"; }
+  else still.style.display = "none";
+  if (span && span.show === "recording" && span.crop) {
+    const c = span.crop;
+    scr.style.transform = `scale(${1920 / c.w}, ${1080 / c.h}) translate(${-c.x / 1920 * 100}%, ${-c.y / 1080 * 100}%)`;
+  } else scr.style.transform = "none";
+  const n = $("note"); n.textContent = note; n.style.display = note ? "block" : "none";
+}
+function play() {
+  if (playhead >= total() - 1) playhead = 0;
+  playing = true; clock = { t0: performance.now(), f0: playhead };
+  [screenP, voiceP].forEach(p => p.els.forEach(e => e._target = -1));
+  $("bplay").firstChild.textContent = "Pause";
+}
+function pause() { playing = false; playhead = Math.round(playhead); $("bplay").firstChild.textContent = "Play"; dirty = true; }
+
+function frame() {
+  if (playing) {
+    playhead = clock.f0 + (performance.now() - clock.t0) / 1000 * FPS;
+    if (playhead >= total()) { playhead = Math.max(total() - 1, 0); pause(); }
+    const x = xOf(playhead), w = cv.clientWidth;
+    if (x > w - 30) setScroll(scrollX + w * 0.8);
+    dirty = true;
+  }
+  if (tl) monitor(playing ? playhead : Math.round(playhead), playing);
+  if (dirty && tl) { dirty = false; draw(); }
+  requestAnimationFrame(frame);
+}
+
+// ---------- controls ----------
+function cuts() { return [...new Set(tl.lanes.voice.concat(tl.lanes.screen).map(i => i.at))].sort((a, b) => a - b); }
+function step(d) { if (playing) pause(); playhead = clamp(Math.round(playhead) + d, 0, Math.max(total() - 1, 0)); const x = xOf(playhead), w = cv.clientWidth; if (x < 20 || x > w - 20) setScroll(playhead * ppf - w / 2); dirty = true; }
+function jump(dir) {
+  const c = cuts(), p = Math.round(playhead);
+  const t = dir > 0 ? c.find(f => f > p) : [...c].reverse().find(f => f < p);
+  if (t !== undefined) step(t - p);
+}
+function toggle(which) {
+  if (which === "link") { link = !link; $("blink").classList.toggle("on", link); toast(link ? "Link on: both lanes are cut together" : "Link off: only the lane you click is cut"); }
+  else { snap = !snap; $("bsnap").classList.toggle("on", snap); toast(snap ? "Snap on: clips click into place, holes close" : "Snap off: move freely, holes stay"); }
+  dirty = true;
+}
+$("bplay").onclick = () => playing ? pause() : play();
+$("bsplit").onclick = doSplit; $("bdel").onclick = doDelete;
+$("blink").onclick = () => toggle("link"); $("bsnap").onclick = () => toggle("snap");
+$("bundo").onclick = undo; $("bredo").onclick = redo; $("bfit").onclick = fit;
+$("breset").onclick = () => { if (confirm("Throw away your changes and go back to the AI's cut?")) { edit(() => load(P.ai)); sel = null; fit(); } };
+window.addEventListener("keydown", e => {
+  if ($("exp").style.display === "flex") return;
+  const k = e.key;
+  if (e.ctrlKey && k.toLowerCase() === "z") { e.shiftKey ? redo() : undo(); }
+  else if (e.ctrlKey && k.toLowerCase() === "y") redo();
+  else if (e.ctrlKey || e.altKey || e.metaKey) return;
+  else if (k === " ") playing ? pause() : play();
+  else if (k.toLowerCase() === "s") doSplit();
+  else if (k === "Delete" || k === "Backspace") doDelete();
+  else if (k === "ArrowLeft") step(e.shiftKey ? -FPS : -1);
+  else if (k === "ArrowRight") step(e.shiftKey ? FPS : 1);
+  else if (k === "ArrowUp") jump(-1);
+  else if (k === "ArrowDown") jump(1);
+  else if (k === "Home") step(-1e9);
+  else if (k === "End") step(1e9);
+  else if (k === ",") doSlip(-1);
+  else if (k === ".") doSlip(1);
+  else if (k.toLowerCase() === "l" || k.toLowerCase() === "n") return;
+  else return;
+  e.preventDefault();
+});
+
+// ---------- export ----------
+$("bexport").onclick = () => startExport(false);
+async function startExport(preview) {
+  if (playing) pause();
+  if (!await flush()) return;
+  $("exp").style.display = "flex"; $("exptitle").textContent = "Exporting the final video"; $("explog").textContent = "starting"; $("expout").textContent = ""; $("expclose").style.display = "none";
+  const r = await fetch("/api/export", { method: "POST", body: JSON.stringify({ preview }) });
+  if (!r.ok) { $("exptitle").textContent = "Could not start"; $("explog").textContent = (await r.json()).error; $("expclose").style.display = ""; return; }
+  const poll = setInterval(async () => {
+    const s = await (await fetch("/api/export")).json();
+    $("explog").textContent = s.log.join("\n");
+    if (s.state === "running") return;
+    clearInterval(poll);
+    $("exptitle").textContent = s.state === "done" ? "Done" : "The export failed";
+    $("expout").textContent = s.state === "done" ? (s.output || "") : "";
+    $("expclose").style.display = "";
+  }, 1000);
+}
+$("expclose").onclick = () => $("exp").style.display = "none";
+window.__editor = { startExport, state: () => ({ tl: plain(), sel, playhead, link, snap, ppf, scrollX, playing }), xOf, LANES };
+
+// ---------- start ----------
+(async () => {
+  P = await (await fetch("/api/project")).json();
+  document.title = "Cut: " + P.name; $("name").textContent = P.name;
+  P.clips.forEach(c => clipBy[c.id] = c);
+  P.phrases.forEach(p => (phrasesBy[p.clip] = phrasesBy[p.clip] || []).push(p));
+  load(P.timeline);
+  screenP = new Player("screen", "screen", [$("s0"), $("s1")]);
+  voiceP = new Player("voice", "voice", [$("v0"), $("v1")]);
+  layoutBubble(); fit(); $("saved").textContent = "saved";
+  setInterval(() => fetch("/api/ping").catch(() => {}), 20000);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

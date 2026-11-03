@@ -45,6 +45,8 @@ The user iterates on the result ("make the list slower", "change the hook"), whi
    user corrected in past edits). Read [reference lessons](references/natural-editing.md), including the complete 15-rule coverage table. These current defaults supersede older card/effect preferences.
 3. If the user keeps a script or notes for this reel (a doc, a note, a pasted script), read it: it
    gives the order of the takes, the spelling of their words, the text hook and where B-roll goes.
+4. Before cutting the next reel, read any unlearned exported `history/*.json` from cut review.
+   Follow [cut-review.md](references/cut-review.md) to record observed lessons without guessing intent.
 
 First run on a machine: `python scripts/doctor.py`. It lists anything missing with the fix.
 
@@ -180,7 +182,23 @@ Film three openings and one body, edit version A in full, then
 `python S/variants.py <workdir-A> B <opening take> --from .. --to ..` builds B and C with the same
 body, for testing which hook wins.
 
-## Step 8: Report
+## Step 8: Review the cuts (when requested)
+
+To let the user improve the cut themselves and learn from the source-time changes, follow
+[cut-review.md](references/cut-review.md). After the checked reel is at its final path:
+
+```
+python S/review.py <workdir> --prepare
+python S/review.py <workdir>
+```
+
+`Edit cuts.cmd` beside the reel reopens the linked picture/voice timeline. Edge trims can
+restore raw footage. Save records draft feedback; Export creates a separate reviewed video
+and durable learning history. Existing visuals travel with their footage. Restored handles
+use the raw take, without newly authored captions or graphics. Preserve the user's working
+timeline when preparing again. Do not open the UI while the user is recording their desktop.
+
+## Step 9: Report
 
 Lead with the file. Then: path and size, loudness, cover path and title (+2 alternates), style and
 why, hook (+2 alternates), the beat plan as a short table, words to check with timestamps, anything
