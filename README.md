@@ -20,6 +20,10 @@ You give it a folder with the takes you filmed on your phone. It:
 6. **Makes the cover:** a frame of you smiling, your logo and the title.
 7. **Exports** a 1080x1920 video ready to post on Reels, Shorts or TikTok.
 
+It can also **learn from reels you like.** Give it 3 to 5 links and it studies how they're edited
+(pacing, cuts, where the text sits, what's shown on screen) and keeps the lessons for your edits,
+without copying their lines, graphics or music.
+
 If you don't like something, tell it in plain words ("the card covers my face", "that cut is too
 tight") and it fixes it. It also writes down what you corrected, so it doesn't make the same
 mistake twice.
@@ -51,10 +55,13 @@ No git? On the GitHub page, click **Code > Download ZIP** and unzip it.
 
 **2. Put it where Claude Code looks for skills**
 
-Copy the `reel-edit` folder into your skills folder:
+Link the `reel-edit` folder into your skills folder, so a `git pull` updates the skill you use:
 
-- Windows: `C:\Users\<you>\.claude\skills\reel-edit`
-- Mac: `~/.claude/skills/reel-edit`
+- Windows (Command Prompt, no admin needed):
+  `mklink /J "%USERPROFILE%\.claude\skills\reel-edit" "<path to the clone>\reel-edit"`
+- Mac: `ln -s "<path to the clone>/reel-edit" ~/.claude/skills/reel-edit`
+
+Or copy the `reel-edit` folder there instead (then an update means copying it again).
 
 **3. Install the Python packages**
 
@@ -80,10 +87,10 @@ Every line should say `OK`. A `MISS` line tells you exactly what to install.
 
 ## Update an existing installation
 
-Run `git pull origin main` inside your AI Editing Skill clone. If you installed by copying the
-folder, the clone and installed skill are separate: copy the updated `reel-edit` files into your
-installed skill again. Keep your existing `brand.json`, custom logo, optional sound files, and
-`deltas.md` feedback history. A pull alone does not refresh a separate installed copy.
+Run `git pull origin main` inside your AI Editing Skill clone. If you linked it (step 2), that's it.
+If you copied the folder, copy the updated files over again, keeping your `local/` folder,
+`deltas.md`, `history/` and any sound files. Your own files are never in the repo, so a pull never
+overwrites them.
 
 The editing lessons and their adoption choices are documented in
 [`reel-edit/references/natural-editing.md`](reel-edit/references/natural-editing.md).
@@ -92,13 +99,15 @@ The editing lessons and their adoption choices are documented in
 
 ## Add your brand
 
-Open `reel-edit/brand.json`. Fonts, explanatory graphics and covers read from it. Hooks, top takeaways, CTAs and default captions stay white with a thin dark outline:
+Create `reel-edit/local/brand.json` with the keys you want to change (start from a copy of
+`reel-edit/brand.json`). It is laid on top of the defaults, and `local/` is never committed, so your
+brand survives every update. Fonts, explanatory graphics and covers read from it. Hooks, top takeaways, CTAs and default captions stay white with a thin dark outline:
 
 | Setting | What it changes |
 |---|---|
 | `colors` | Your palette. `primary` is the cover fade and title boxes, `bright` is for explanatory UI, `highlight` is an optional diagram accent, `error` is for wrong or broken things |
 | `fonts` | Your font names and the Google Fonts link that loads them |
-| `logo` | A PNG of your logo, shown at the top of the cover. Put it in `reel-edit/assets/` |
+| `logo` | A PNG of your logo, shown at the top of the cover, for example `local/logo.png` |
 | `follow_line` | The line in your plain-text follow CTA |
 | `caption_language` | `en`, or `ar` for Arabic captions (English words stay in English letters) |
 | `browser` | `msedge` or `chrome` |
@@ -109,6 +118,10 @@ my font is ..., my logo is this file"*, and it fills in the file for you.
 Optional and off by default: the rising sound under the hook isn't included because its license doesn't allow sharing
 the file. `reel-edit/assets/sfx/SOURCE.md` says where to get it for free. Without it, everything
 still works.
+
+**Your own process** goes in `reel-edit/local/WORKFLOW.md`: where your scripts live, where finished
+reels should be filed, your CTAs, extra steps. The skill reads it first on every run, and its rules
+win over the defaults.
 
 ---
 
@@ -147,6 +160,23 @@ You get, inside the reel's folder:
 
 Then just talk to it: *"make the list slower"*, *"move the card up, it covers my eyes"*, *"use the
 second take for the intro"*. It edits and re-renders only what changed.
+
+---
+
+## Learn from reels you like
+
+```
+/reel-edit references https://www.instagram.com/reel/... https://www.instagram.com/reel/... https://www.instagram.com/reel/...
+```
+
+It downloads each reel (needs `pip install yt-dlp`; if Instagram asks for a login, download the reel
+yourself and give it the file instead), makes a contact sheet of every second, measures the cuts,
+the speaking pace and the loudness, and looks at all of it. Then it writes what those reels have in
+common into `local/style.md`, which every later edit reads.
+
+One rule it holds to: **take inspiration, don't copy.** It records how a reel is edited, never what it
+says or shows, and a habit has to show up in at least 2 of the reels before it counts. Your own
+corrections always win over anything it learned this way.
 
 ---
 

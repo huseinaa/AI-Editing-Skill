@@ -23,7 +23,7 @@ Every end in cuts.txt is written 0.06s after the last word. The video's very las
 exception: it is pushed out so END_TAIL is left after the word and it finishes, with a softer fade.
 Names are the file names without the extension. Raw takes are never changed.
 """
-import argparse, json, os, subprocess
+import argparse, json, os, shlex, subprocess
 
 TAKE_EXT = {".mov"}
 VIDEO_EXT = {".mov", ".mp4", ".m4v", ".webm", ".mkv"}
@@ -124,7 +124,7 @@ def voice_chain(name, src, spans, phone):
     return voice_cache[name]
 if a.cuts:
     for raw in open(a.cuts, encoding="utf-8"):
-        line = raw.split("#")[0].split()
+        line = shlex.split(raw.split("#")[0])   # quote a take name with spaces: trim "Sitemap (2)" from=..
         if not line:
             continue
         cmd, names = line[0], line[1:]

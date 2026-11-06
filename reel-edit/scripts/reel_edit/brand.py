@@ -1,6 +1,8 @@
 """Your brand, read from brand.json at the skill's root. Every graphic, caption and cover uses it.
 
-Missing keys fall back to the defaults below, so a half-filled brand.json still works.
+local/brand.json, if it exists, is laid on top of brand.json. Keep your own values there: local/ is
+never committed, so pulling a new version of the skill never touches them.
+Missing keys fall back to the defaults below, so a half-filled file still works.
 """
 import json, os
 
@@ -16,9 +18,15 @@ DEFAULTS = {
 }
 
 
+def _read(path):
+    return json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+
+
 def load():
-    path = os.path.join(ROOT, "brand.json")
-    data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+    data = _read(os.path.join(ROOT, "brand.json"))
+    local = _read(os.path.join(ROOT, "local", "brand.json"))
+    for k, v in local.items():
+        data[k] = {**data.get(k, {}), **v} if isinstance(v, dict) else v
     out = {**DEFAULTS, **{k: v for k, v in data.items() if not k.startswith("_")}}
     for k in ("colors", "fonts"):
         out[k] = {**DEFAULTS[k], **data.get(k, {})}

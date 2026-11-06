@@ -63,30 +63,34 @@ def hl(text):
 # ---------------- layout wrappers ----------------
 def overlay(html, top=None, motion="ease"):
     """top= visible top edge in master px. motion: ease (graphics) or cut (stationary text)."""
-    if motion not in ("ease", "cut"):
-        raise ValueError("overlay motion must be 'ease' or 'cut'")
+    # a card that changes in place: first state "in", middle states "quick", last state "quick-out"
+    if motion not in ("ease", "cut", "in", "out", "quick", "quick-out"):
+        raise ValueError("overlay motion must be one of ease, cut, in, out, quick, quick-out")
     return (html, "overlay", {"top": top, "motion": motion})
 
-def full(inner, grid=True):
-    return (f'<div class="full{" grid-bg" if grid else ""}">{inner}</div>', "full")
+
+def full(inner, grid=True, motion="cut"):
+    """Enters and leaves on a hard cut, like a cut between clips. Start it on the word it shows.
+    motion="ease" brings back the fade."""
+    return (f'<div class="full{" grid-bg" if grid else ""}">{inner}</div>', "full", {"motion": motion})
 
 
-def split(inner):
+def split(inner, motion="cut"):
     """inner is laid out inside the panel's safe column. Keep it under ~560px tall:
     the caption sits at y 1845, inside the panel."""
-    return (f'<div class="split grid-bg"><div class="pan">{inner}</div></div>', "split")
+    return (f'<div class="split grid-bg"><div class="pan">{inner}</div></div>', "split", {"motion": motion})
 
 
-def broll(path, mode="full", start=0.0, top=None, audio=False, height=None, lift=0):
+def broll(path, mode="full", start=0.0, top=None, audio=False, height=None, lift=0, motion="ease"):
     """A real clip (screen recording, footage). Muted, frozen on its last frame if short.
     full / split / pip cover-crop the clip to their shape. bottom shows it whole, not cropped, in a
     rounded window under the face (a clip he reacts to while talking); top= moves that window's top edge.
     A still image (.png/.jpg/.webp) works too, held for the whole span: posters that pop in one by one.
-    audio=True plays the clip's own sound at full and mutes his camera over the same span, crossfading
+    audio=True plays the clip's own sound at full and mutes the camera sound over the same span, crossfading
     back to the voice at the end (a clip he reacts to).
     bottom only: height= makes the window that tall (it may run past the safe line for a clip he
     reacts to: "way bigger, it should be clear"), lift= slides the face up that many px while it is up."""
-    return {"broll": path, "mode": mode, "start": start, "top": top, "audio": audio, "height": height, "lift": lift}
+    return {"broll": path, "mode": mode, "start": start, "top": top, "audio": audio, "height": height, "lift": lift, "motion": motion}
 
 
 # ---------------- icons ----------------

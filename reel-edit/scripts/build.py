@@ -43,6 +43,7 @@ OVERLAY_Y, CAP_Y, CAP_Y_SPLIT = 260, 1700, 1845
 OV_IN, OV_OUT, OV_RISE = 0.45, 0.35, 50   # cards: fade + ease-out rise
 FS_IN, FS_OUT = 0.35, 0.35                # full / split from and back to the face
 XF = 0.3                                  # crossfade between back-to-back solid states
+QUICK = 0.15                              # quick fade between states of one card
 SLIDE = 0.4                               # face slides up for split mode
 FX, FY = p.face
 SHIFT = max(0, FY - 575)                  # puts the face centre in the middle of the top area
@@ -191,6 +192,14 @@ for i, (v, s, e, k) in enumerate(vis):
     xf_in = adjacent(i, i - 1) and solid(i) and solid(i - 1)
     xf_out = adjacent(i, i + 1) and solid(i) and solid(i + 1)
     end = e + XF if xf_out else e  # hold under the next state while it crossfades in
+    # Card motion: ease (fade in + out), cut (neither), in / out (one side only), quick (a 0.15s fade in,
+    # for the next state of the same card), quick-out (quick in, normal out: the last state).
+    # in and quick hold QUICK past their end so the next state fades in on top of them, no dip between.
+    val = p.visuals[v]
+    motion = (val[2].get("motion", "ease") if isinstance(val, tuple) and len(val) > 2
+              else val.get("motion", "ease") if isinstance(val, dict) else "ease")
+    if k in CARD and motion in ("in", "quick"):
+        end = max(end, e + QUICK)
     if k.startswith("broll"):
         b = p.visuals[v]
         win_top = OVERLAY_Y
@@ -222,10 +231,13 @@ for i, (v, s, e, k) in enumerate(vis):
     chain = "format=rgba"
     if k in CARD:
         options = p.visuals[v][2] if k == "overlay" and len(p.visuals[v]) > 2 else {}
-        stationary = options.get("motion", "ease") == "cut"
-        if not stationary and s >= 0.05:  # a visual that starts the reel is there on frame one, it does not fade in
+        # motion is read above the loop branch (ease / cut / in / out / quick / quick-out)
+        stationary = motion != "ease"
+        if motion in ("ease", "in") and s >= 0.05:  # a visual that starts the reel is there on frame one, it does not fade in
             chain += f",fade=t=in:st={s}:d={OV_IN}:alpha=1"
-        if not stationary and e < p.dur - 0.1:
+        if motion in ("quick", "quick-out") and s >= 0.05:
+            chain += f",fade=t=in:st={s}:d={QUICK}:alpha=1"
+        if motion in ("ease", "out", "quick-out") and e < p.dur - 0.1:
             chain += f",fade=t=out:st={e - OV_OUT:.2f}:d={OV_OUT}:alpha=1"
         w = bw if k in WINDOW else meta[v]["w"]
         card_top = options.get("top")
@@ -233,15 +245,22 @@ for i, (v, s, e, k) in enumerate(vis):
             card_top = OVERLAY_Y
         top = win_top if k in WINDOW else card_top - meta[v]["pad"]
         x = f"{SAFE_L + (SAFE_W - w) // 2}"
-        y = str(top) if stationary else f"'{top}+{OV_RISE}*pow(max(0\\,1-(t-{s})/{OV_IN})\\,3)'"
+        if k in WINDOW and b.get("x") is not None:
+            x = str(b["x"])
+        y = str(top) if motion not in ("ease", "in") or s < 0.05 else f"'{top}+{OV_RISE}*pow(max(0\\,1-(t-{s})/{OV_IN})\\,3)'"
     else:
-        if s >= 0.05:
+        # From the face to a full screen and back is a hard cut on the word, like a cut between clips
+        # (a fade shows the face through the graphic). motion="ease" brings
+        # the old fade and slide back. Two states of one graphic still crossfade into each other.
+        opts = p.visuals[v][2] if isinstance(p.visuals[v], tuple) and len(p.visuals[v]) > 2 else {}
+        eased = opts.get("motion") == "ease"
+        if s >= 0.05 and (xf_in or eased):
             chain += f",fade=t=in:st={s}:d={XF if xf_in else FS_IN}:alpha=1"
-        if not xf_out and e < p.dur - 0.1:
+        if eased and not xf_out and e < p.dur - 0.1:
             chain += f",fade=t=out:st={e - FS_OUT:.2f}:d={FS_OUT}:alpha=1"
         x, y = "0", "0"
         if k in SPLITS:
-            y = str(SPLIT_Y) if xf_in else f"'{SPLIT_Y}+{OV_RISE * 2}*pow(max(0\\,1-(t-{s})/{SLIDE})\\,3)'"
+            y = str(SPLIT_Y) if (xf_in or not eased) else f"'{SPLIT_Y}+{OV_RISE * 2}*pow(max(0\\,1-(t-{s})/{SLIDE})\\,3)'"
     f.append(f"[{src_label}]{chain}[v{n}]")
     enabled = f"gte(t,{s})*lt(t,{end:.2f})" if k == "overlay" and stationary else f"between(t,{s},{end:.2f})"
     f.append(f"[{last}][v{n}]overlay=x={x}:y={y}:eof_action=pass:enable='{enabled}'[o{n}]")
@@ -255,7 +274,9 @@ for j, fp in enumerate(p.face_pip):
     ps, pe = fp["window"]
     circle = fp.get("shape") == "circle"
     args += ["-loop", "1", "-framerate", "30", "-t", f"{p.dur + 0.5:.2f}", "-i", window_mask((bw, bh), f"facepip{j}", circle)]
-    fades = (f",fade=t=in:st={ps}:d={FS_IN}:alpha=1" if ps >= 0.05 else "") + (f",fade=t=out:st={pe - FS_OUT:.2f}:d={FS_OUT}:alpha=1" if pe < p.dur - 0.1 else "")
+    # cuts in and out with the full screen under it; "motion": "ease" fades it
+    eased = fp.get("motion") == "ease"
+    fades = (f",fade=t=in:st={ps}:d={FS_IN}:alpha=1" if eased and ps >= 0.05 else "") + (f",fade=t=out:st={pe - FS_OUT:.2f}:d={FS_OUT}:alpha=1" if eased and pe < p.dur - 0.1 else "")
     f.append(f"[srcp{j}]crop={cw}:{ch}:{cx}:{cy},scale={bw}:{bh},format=rgba[fp0_{j}]")
     f.append(f"[{n}:v]format=gray[fpm{j}]")
     f.append(f"[fp0_{j}][fpm{j}]alphamerge{fades}[fp{j}]")

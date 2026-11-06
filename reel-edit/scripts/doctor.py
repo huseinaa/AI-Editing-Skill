@@ -23,6 +23,8 @@ for mod, pkg in [("faster_whisper", "faster-whisper"), ("playwright", "playwrigh
     check(f"python: {pkg}", importlib.util.find_spec(mod), f"pip install {pkg}")
 check("python: truststore (only behind a network that re-signs HTTPS)", importlib.util.find_spec("truststore"),
       "pip install truststore", required=False)
+check("python: yt-dlp (only to download reference reels from links)", importlib.util.find_spec("yt_dlp"),
+      "pip install yt-dlp", required=False)
 
 model = os.path.expanduser("~/.cache/faster-whisper-small/model.bin")
 check("Whisper small model (~/.cache/faster-whisper-small)", os.path.exists(model),
@@ -37,6 +39,16 @@ if os.path.exists(brand_path):
         check("brand.json is valid JSON", True, "")
     except ValueError as e:
         check("brand.json is valid JSON", False, str(e))
+    local_path = os.path.join(ROOT, "local", "brand.json")
+    if os.path.exists(local_path):
+        try:
+            json.load(open(local_path, encoding="utf-8"))
+            check("local/brand.json (your values, laid on top) is valid JSON", True, "")
+        except ValueError as e:
+            check("local/brand.json is valid JSON", False, str(e))
+    else:
+        check("local/brand.json (your own brand, never committed)", False,
+              "optional: put your colors, fonts, logo and follow line in local/brand.json", required=False)
     check(f"logo for covers ({BRAND.get('logo_config') or 'none set'})", LOGO, "put a PNG at the path in brand.json, or covers are made with no logo",
           required=False)
     paths = {"msedge": [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",

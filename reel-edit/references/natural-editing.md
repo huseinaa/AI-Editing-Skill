@@ -12,6 +12,12 @@ card, yellow-block, caption-fade, hook-zoom, and riser defaults. Retain complete
 internal pauses, actual-word timing, mixed Arabic/English shaping, safe zones, and existing covers.
 Explanatory diagrams remain available for abstract concepts; never fabricate proof.
 
+**Confirmed on a real reel, 2 Nov 2026 ("this style is it"):** Add Sitemap to Website v3 is the
+reference (`examples/sitemap-tutorial/edit.py`): real artifacts in small cards under the chin, one
+full screen with the face circle on hard cuts, captions moved below anything on screen. Refined
+3 Nov 2026: apps and sites as screen recordings rather than stills, step titles above the head in the
+hook style, and quick 0.15 s fades between states of one card.
+
 ## All 15 rules from the overview: adoption audit
 
 The overview clip listed below shows these exact headings at 2.6-7.2s. Only five have separate

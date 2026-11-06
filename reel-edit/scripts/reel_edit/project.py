@@ -6,6 +6,7 @@ edit.py contract (Claude writes one per video, in the video's work dir):
                  Plain 3-4 word phrases by default. Explicit legacy *word* highlighting remains supported. Optional third item, a style dict (the moving-caption style, 27 Oct 2026):
                  {"y": centre y, "x": centre x, "scale": size multiplier}; {word} inside the text = a big word
     VISUALS      {"id": overlay(...) | split(...) | full(...) | broll(...)}
+                 A broll window dict may set "x" (left edge on the master canvas) for side-by-side recordings.
     TIMELINE     [("id", start, end), ...]  later entries draw on top of earlier ones
   optional:
     CAPTION_LANG "ar" (Arabic letters, English terms kept Latin) or "en"
