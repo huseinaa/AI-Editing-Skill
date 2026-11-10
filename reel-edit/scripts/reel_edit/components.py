@@ -385,13 +385,13 @@ def caption_css(lang="ar"):
     *word* colors the one key term of a caption in the accent color (the tool, product or concept named)."""
     d = "rtl" if lang == "ar" else "ltr"
     return f"""
-.cap {{ display:inline-block; max-width:1290px; text-align:center; direction:{d}; unicode-bidi:plaintext;
+.cap {{ display:inline-block; white-space:nowrap; text-align:center; direction:{d}; unicode-bidi:plaintext;
   font-family: {f"'{ARABIC}', '{LATIN}'" if lang == 'ar' else f"'{LATIN}'"}, sans-serif; font-weight:700; font-size:{78 if lang == 'ar' else 74}px; line-height:1.3; color:#fff; padding:44px 50px;
   -webkit-text-stroke:3px rgba(0,0,0,.9); paint-order:stroke fill;
   text-shadow:0 3px 8px rgba(0,0,0,.6); }}
 .cap .en {{ font-family: '{LATIN}', sans-serif; font-weight:700; font-size:{'.9em' if lang == 'ar' else '1em'}; }}
 .cap .kw {{ color: {ACCENT}; }}
-.cap.in-card {{ max-width: {FACE_BOX[2] - 30}px; padding: 30px 24px; }}
+.cap.in-card {{ padding: 30px 24px; }}
 .cap .big {{ font-size: 1.6em; line-height: 1; }}
 .cap .big .en, .cap .en .big {{ font-size: inherit; }}
 """

@@ -146,8 +146,10 @@ People change wording on camera. **The transcript is the truth, the script is a 
 - **One key term in the accent color** (`*word*`): the tool, product or concept being named ("Supabase",
   "WebView", "website"), not every English word. Most captions have none. The accent is a light tint of
   the brand's bright color so it reads on dark footage (`"accent"` in the brand overrides it).
-- Inside the face square of a light screen, captions sit in the square's bottom, narrower; two lines are
-  fine there. build.py and render.py place them by themselves.
+- **Always one line, everywhere** (3 to 4 words; split a longer phrase into two captions). Inside the
+  face square of a light screen, captions sit in the square's bottom and shrink to fit its width on one
+  line; build.py and render.py do it by themselves. render.py warns when a chunk had to shrink a lot:
+  split it.
 - Arabic: Arabic letters, English terms stay Latin (app, AI, UI...). **Numbers read left to right**
   inside Arabic captions: write them with their separators ("5,000", "$53,000", "100%") and render.py
   keeps each one as an LTR run. Look at every caption with a number on the check sheet. Show monetary
@@ -220,7 +222,7 @@ more, boxes 300 px or more.
   in monospace, browser colors (tags `#881280`, attribute names `#994500`, values `#1A1AA6`), long lines
   running off the edge. When the speaker says what matters, a second state makes those lines bold.
   Headless Edge hangs on its own XML viewer, so lay the text out in HTML yourself.
-- **Captions** go inside the face square during a light screen, by themselves. Over the face they stay
+- **Captions** go inside the face square during a light screen, by themselves, still one line. Over the face they stay
   at y 1700; a caption that starts while a `broll(mode="bottom")` window is up gets `{"y": 1855}`.
 - **Sound effects** (on by default, `AUTO_SFX`): a soft pop when a pill or the CTA arrives (not on frame
   one, not on quick state changes) and a soft whoosh as the face shrinks into a light screen. Add a

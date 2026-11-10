@@ -8,7 +8,8 @@ shaping and mixed-direction text come out right.
 import json, os, re, sys
 from playwright.sync_api import sync_playwright
 from reel_edit.project import load, kind_of
-from reel_edit.components import CSS, caption_css
+from reel_edit.components import CSS, caption_css, SAFE_W, FACE_BOX
+CARD_TEXT_W = FACE_BOX[2] - 60   # one-line captions inside the face square fit this width
 from reel_edit.brand import BROWSER
 
 OVERLAY_PAD = 110  # transparent room for the card shadow, or it clips into a square behind the corners
@@ -65,17 +66,24 @@ with sync_playwright() as pw:
         for i, (text, s, e) in enumerate(p.captions):
             sc = p.caption_style.get(i, {}).get("scale", 1)
             style = f' style="font-size:{78 * sc if p.lang == "ar" else 74 * sc:.0f}px"' if sc != 1 else ""
-            # inside the face square of a light screen the caption is narrower, and may take two lines
+            # always one line (the user's call, 10 Nov 2026). Inside the face square of a light screen the
+            # caption shrinks to fit the square's width instead of wrapping
             card = any(fc["window"][0] - 0.05 <= s < fc["window"][1] for fc in p.face_card)
             cls = "cap in-card" if card else "cap"
             pg.set_content(page(f'<div id="c" class="{cls}"{style}>{wrap(text)}</div>', caption_css(p.lang)), wait_until="networkidle")
             pg.evaluate("document.fonts.ready")
             el = pg.locator("#c")
+            fit = CARD_TEXT_W if card else SAFE_W
+            text_w = pg.evaluate("() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('c')); return r.getBoundingClientRect().width; }")
+            if text_w > fit:
+                size = float(pg.evaluate("() => parseFloat(getComputedStyle(document.getElementById('c')).fontSize)"))
+                new = size * fit / text_w
+                pg.evaluate(f"() => document.getElementById('c').style.fontSize = '{new:.1f}px'")
+                if new < size * 0.72:   # shrunk this far it reads small: the chunk has too many words
+                    tall.append((i, text))
             el.screenshot(path=os.path.join(p.png, f"c_{i:03d}.png"), omit_background=True)
-            if not card and el.bounding_box()["height"] > 260 * max(sc, 1) * (1.6 if "class=\"big\"" in wrap(text) else 1):
-                tall.append((i, text))
         if tall:
-            print("WARNING two-line captions (split them):", tall)
+            print("WARNING captions too long for one line (split them, 3-4 words):", tall)
     b.close()
 json.dump(meta, open(meta_path, "w"), indent=1)
 print(f"rendered {n} visuals, {len(p.captions)} captions")
