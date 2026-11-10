@@ -4,7 +4,7 @@
 
 Each number is placed in the take it fell in, and keeps its distance from the take's source start.
 start= values (a time inside a B-roll clip) are left alone, and so are lines that set a level, not a time
-(PUNCH_ZOOM, ZOOM_LEVEL, RISER_GAIN_DB).
+(PUNCH_ZOOM, ZOOM_LEVEL).
 """
 import io, json, re, sys
 

@@ -4,13 +4,19 @@ Canvas is the 1440x2560 master (exported at 1080x1920). Instagram safe box: x 90
 Brand palette and fonts: brand.json at the skill root (see reel_edit/brand.py).
 
 An edit.py builds VISUALS from these. Each value is one of:
-    overlay(html)   graphic overlay; text helpers use plain outlined text in the safe box
+    overlay(html)   graphic overlay over the face (top_pill, hook_card and the CTAs are overlays)
+    light(inner)    THE DEFAULT SCREEN: a light background, the graphic in the top part (panel()), and
+                    the face shrinking from full screen into a big rounded square under it
     split(inner)    face video on top, dark graphic panel below SPLIT_Y
     full(inner)     full-screen graphic, voice carries on
-    broll(path, mode="full"|"split"|"pip", start=0)   a real video clip, muted
+    broll(path, mode="full"|"split"|"pip"|"bottom"|"panel", start=0)   a real video clip, muted
+
+The default look (light mode, user's call 10 Nov 2026): the face with white pills at the top for names,
+labels and numbers; a light screen with the face in a square for anything worth seeing; captions with
+one *keyword* in the accent color.
 """
 
-from .brand import INK, PANEL, MUTED, BLUE, BRIGHT, YELLOW, RED, LATIN, ARABIC, FONTS_URL
+from .brand import INK, PANEL, MUTED, BLUE, BRIGHT, YELLOW, RED, SURFACE, TINT, ACCENT, LATIN, ARABIC, FONTS_URL
 W, H = 1440, 2560
 SAFE_L, SAFE_R, SAFE_T, SAFE_B = 90, 1350, 360, 1920   # symmetric left/right: everything centers on the frame (x = 720)
 SAFE_W = SAFE_R - SAFE_L
@@ -19,6 +25,15 @@ SPLIT_H = H - SPLIT_Y
 PIP = (1000, 700)       # b-roll picture-in-picture window size (top of safe box)
 BOTTOM_TOP = 1100       # b-roll "bottom" window: from just under the mouth down to the safe box's bottom edge
 BOTTOM_CAP_Y = 1835     # captions sit across that window's bottom edge while it is up, clear of the face
+# light screens: the graphic sits in PANEL_BOX, the face in FACE_BOX (a rounded square, bottom on the safe line)
+PANEL_BOX = (120, 380, 1200, 810)       # x, y, w, h: ends 45 px above the face square
+FACE_BOX = (327, 1235, 786, 685)        # x, y, w, h
+FACE_RADIUS = 44
+FACE_CAP_Y = FACE_BOX[1] + FACE_BOX[3] - 100   # captions sit inside the bottom of the face square
+PILL_TOP = SAFE_T + 12                   # white pills and the hook, at the top of the safe box
+ICONS = "https://cdn.jsdelivr.net/npm/lucide-static@0.460.0/icons"        # lucide.dev names: globe, database, lock...
+LOGOS = "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons"          # simpleicons.org slugs: supabase, github...
+SHADOW = "0 22px 56px rgba(0,81,189,.14), 0 3px 10px rgba(8,11,20,.07)"   # soft, a little blue, like the brand's cards
 
 FONTS = FONTS_URL
 
@@ -52,6 +67,24 @@ html, body {{ background: transparent; font-family: '{LATIN}', '{ARABIC}', sans-
 .text-overlay .support {{ font-size:44px; font-weight:700; margin-top:12px; }}
 
 .ring {{ outline: 9px solid {YELLOW}; outline-offset: 6px; }}
+
+/* light mode */
+.light {{ width: {W}px; height: {H}px; position: relative; overflow: hidden; background:
+  radial-gradient(1200px 900px at 50% 0%, rgba(47,107,255,.10), transparent 70%), {SURFACE}; }}
+.panel {{ position: absolute; left: {PANEL_BOX[0]}px; top: {PANEL_BOX[1]}px; width: {PANEL_BOX[2]}px; height: {PANEL_BOX[3]}px;
+  background: #fff; border-radius: 44px; box-shadow: {SHADOW}; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; }}
+.panel.dots {{ background-image: radial-gradient(rgba(8,11,20,.09) 2px, transparent 2px); background-size: 34px 34px; }}
+.panel.bare {{ background: transparent; box-shadow: none; }}
+.pill {{ display: inline-flex; align-items: center; gap: 28px; background: #fff; color: {INK}; border-radius: 40px;
+  padding: 22px 44px 22px 22px; box-shadow: {SHADOW}; font-weight: 800; line-height: 1.1; white-space: nowrap;
+  max-width: {SAFE_W}px; unicode-bidi: plaintext; }}
+.pill.text {{ display: block; white-space: normal; text-align: center; padding: 30px 52px; line-height: 1.16; direction: rtl; }}
+.pill .sub {{ font-weight: 700; color: {MUTED}; }}
+.tile {{ display: inline-flex; align-items: center; justify-content: center; flex: none; }}
+.tag {{ display: inline-flex; align-items: center; gap: 12px; border-radius: 999px; font-weight: 700; padding: 8px 24px; }}
+.box {{ background: #fff; border-radius: 32px; box-shadow: {SHADOW}; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px; font-weight: 800; color: {INK}; }}
 """
 
 
@@ -104,10 +137,12 @@ PHOTO = f"""<svg width="100%" height="100%" viewBox="0 0 300 150" preserveAspect
 
 
 # ---------------- overlay cards ----------------
-def hook_card(html, size=106):
-    """Frame-one outlined text, seven words or fewer and at most two lines. No box."""
-    return overlay(f'<div class="text-overlay" style="font-size:{size}px">{html}</div>',
-                   top=SAFE_T + 12, motion="cut")
+def hook_card(html, size=74, style="pill"):
+    """The text hook (and any title above the head): a white pill at the top, on frame one.
+    Seven words or fewer, at most two lines. style="outline" is the old plain outlined text."""
+    if style == "outline":
+        return overlay(f'<div class="text-overlay" style="font-size:{size * 1.4:.0f}px">{html}</div>', top=PILL_TOP, motion="cut")
+    return overlay(f'<div class="pill text" style="font-size:{size}px;max-width:1180px">{html}</div>', top=PILL_TOP, motion="cut")
 
 def pill(label, kind="good"):
     """Cause pill: good = blue + check, bad = red + cross, plain = ink, no mark."""
@@ -121,29 +156,32 @@ def pill(label, kind="good"):
 def takeaway(pills, headline, sub="", color=INK):
     """Plain takeaway. Legacy pills/color arguments remain accepted, without badges or color fills."""
     context = " · ".join(label for label, kind in (pills or []))
-    return overlay(f"""<div class="text-overlay" style="font-size:68px">
-      {f'<div class="context">{context}</div>' if context else ''}
+    return overlay(f"""<div class="pill text" style="font-size:66px;max-width:1180px">
+      {f'<div class="sub" style="font-size:40px;margin-bottom:10px">{context}</div>' if context else ''}
       <div>{headline}</div>
-      {f'<div class="support">{sub}</div>' if sub else ''}</div>""",
-      top=SAFE_T + 12, motion="cut")
+      {f'<div class="sub" style="font-size:42px;margin-top:10px">{sub}</div>' if sub else ''}</div>""",
+      top=PILL_TOP, motion="ease")
+
+
+def _cta(icon_name, head, line):
+    return overlay(f"""<div class="pill" style="flex-direction:column;gap:14px;padding:30px 52px;white-space:normal;text-align:center">
+      <div class="row" style="gap:26px;font-size:76px">{tile(icon(icon_name, 54, "#fff"), 104)}<span>{head}</span></div>
+      <div class="sub" style="font-size:42px;max-width:1080px">{line}</div></div>""", top=PILL_TOP, motion="ease")
 
 
 def follow_card(line):
-    """Growth CTA as plain outlined text."""
-    return overlay(f'<div class="text-overlay" style="font-size:64px">Follow<div class="support">{line}</div></div>',
-                   top=SAFE_T + 12, motion="cut")
+    """Growth CTA: a white pill, the follow icon, "Follow" and the line under it."""
+    return _cta("user-plus", "Follow", line)
 
 
 def send_card(line):
-    """Send CTA as plain outlined text, without a button or icon."""
-    return overlay(f'<div class="text-overlay" style="font-size:64px">Send this<div class="support">{line}</div></div>',
-                   top=SAFE_T + 12, motion="cut")
+    """Send CTA as a white pill."""
+    return _cta("send", "Send this", line)
 
 
 def keyword_card(keyword, line, verb="Comment"):
-    """Plain keyword CTA. Use the user-provided CTA keyword; do not invent a promised resource."""
-    return overlay(f'<div class="text-overlay" style="font-size:80px">{verb} {keyword}<div class="support">{line}</div></div>',
-                   top=SAFE_T + 12, motion="cut")
+    """Keyword CTA as a white pill, the keyword in the brand color. Use the user's CTA keyword only."""
+    return _cta("message-circle", f'{verb} <span style="color:{BRIGHT}">{keyword}</span>', line)
 
 # ---------------- full-screen building blocks (put inside full(...)) ----------------
 def title_block(kicker, title, size=112):
@@ -259,9 +297,92 @@ def demo_app(ring=None, grid=False):
       </div>{layout}</div>"""
 
 
+# ---------------- light mode (the default look) ----------------
+def icon(name, size=56, color=None):
+    """A lucide.dev line icon in any color (globe, smartphone, database, lock, link, check, arrow-right,
+    cpu, mail, users, repeat, message-circle, search, code, server, zap...). Loaded from the CDN at render."""
+    url = f"{ICONS}/{name}.svg"
+    return (f'<span style="display:inline-block;width:{size}px;height:{size}px;flex:none;background:{color or BRIGHT};'
+            f'-webkit-mask:url({url}) center/contain no-repeat;mask:url({url}) center/contain no-repeat"></span>')
+
+
+def brand_logo(slug, size=56, color=None):
+    """A real app or brand logo from simpleicons.org, in its brand color (pass color='#3ECF8E' for Supabase).
+    Never draw a fake logo: if the brand is not on simple-icons, use its own SVG from the reel folder."""
+    url = f"{LOGOS}/{slug}.svg"
+    return (f'<span style="display:inline-block;width:{size}px;height:{size}px;flex:none;background:{color or INK};'
+            f'-webkit-mask:url({url}) center/contain no-repeat;mask:url({url}) center/contain no-repeat"></span>')
+
+
+def tile(inner, size=96, bg=None, radius=None):
+    """A rounded icon tile: the brand blue with a white icon by default, or bg=TINT with a blue icon."""
+    return (f'<span class="tile" style="width:{size}px;height:{size}px;border-radius:{radius or round(size * .28)}px;'
+            f'background:{bg or BRIGHT}">{inner}</span>')
+
+
+def tag(text, color=None, bg=None, dot=True, size=40):
+    """A small rounded tag beside a label: "1+ year", "Open Source", "Free"."""
+    c = color or BRIGHT
+    d = f'<span style="width:{size // 3}px;height:{size // 3}px;border-radius:50%;background:{c}"></span>' if dot else ""
+    return f'<span class="tag" style="font-size:{size}px;color:{c};background:{bg or TINT}">{d}{text}</span>'
+
+
+def pill_html(label, icon_html=None, sub=None, size=80, after=""):
+    """The white pill itself, as HTML (to place inside a panel, or to build states of)."""
+    ic = tile(icon_html, round(size * 1.3)) if icon_html else ""
+    s = f'<span class="sub" style="font-size:{round(size * .55)}px">{sub}</span>' if sub else ""
+    pad = "" if ic else "padding-left:44px;"
+    return f'<div class="pill" style="font-size:{size}px;{pad}">{ic}<span>{label}</span>{s}{after}</div>'
+
+
+def top_pill(label, icon_html=None, sub=None, size=80, after="", motion="ease"):
+    """A white pill at the top, over the face: the name, label or number being said ("Supabase", "20+
+    automations", "Responsive"). States of one pill: motion "in", then "quick", last "quick-out".
+    icon_html: icon("globe", 64, "#fff") or brand_logo("supabase", 64, "#fff"); it sits on a blue tile.
+    after: anything appended inside the pill (a tag(), an arrow and a second icon, a check)."""
+    return overlay(pill_html(label, icon_html, sub, size, after), top=PILL_TOP, motion=motion)
+
+
+def light(inner, face=True, motion="cut"):
+    """THE DEFAULT SCREEN for anything worth seeing: a light background with `inner` (usually a panel())
+    in the top part, and the face shrinking from full screen into the rounded square FACE_BOX under it
+    (and growing back at the end). Captions move inside the face square by themselves.
+    face=False: the light screen alone, no face (rare)."""
+    return (f'<div class="light">{inner}</div>', "full", {"motion": motion, "face": face})
+
+
+def panel(inner, dots=False, bare=False, h=None, style=""):
+    """The white card in the top part of a light screen (PANEL_BOX). Content is centered.
+    dots=True adds a faint dot grid (diagrams); bare=True drops the card (content straight on the light
+    background, or under a screen() recording). The face square starts 45 px under it."""
+    cls = "panel" + (" dots" if dots else "") + (" bare" if bare else "")
+    hh = f"height:{h}px;" if h else ""
+    return f'<div class="{cls}" style="{hh}{style}">{inner}</div>'
+
+
+def heading(text, icon_html=None, size=60):
+    """A title inside a panel: an icon and bold text ("Supabase", "Cron Jobs")."""
+    return f'<div class="row" style="gap:20px;font-size:{size}px;font-weight:800;color:{INK}">{icon_html or ""}<span>{text}</span></div>'
+
+
+def box(label, icon_html=None, w=420, h=260, size=46, dim=False):
+    """A small white box with an icon tile on top and a label: one item of a set (Authentication, Database).
+    dim=True keeps its slot but shows it faded (an item not said yet, so the layout never jumps)."""
+    ic = tile(icon_html, 92, TINT) if icon_html else ""
+    return (f'<div class="box" style="width:{w}px;height:{h}px;font-size:{size}px;opacity:{.25 if dim else 1}">'
+            f'{ic}<span>{label}</span></div>')
+
+
+def screen(path, start=0.0, audio=False):
+    """A screen recording (or a still) on a light screen: fitted into the top part, rounded, with a soft
+    shadow. Put it in the TIMELINE on top of a light(panel("", bare=True)) visual with the same span."""
+    return broll(path, mode="panel", start=start, audio=audio, motion="cut")
+
+
 # ---------------- captions ----------------
 def caption_css(lang="ar"):
-    """Stationary white captions, weight 700, thin outline. Write natural 3-4 word chunks."""
+    """Stationary white captions, weight 700, thin outline. Write natural 3-4 word chunks.
+    *word* colors the one key term of a caption in the accent color (the tool, product or concept named)."""
     d = "rtl" if lang == "ar" else "ltr"
     return f"""
 .cap {{ display:inline-block; max-width:1290px; text-align:center; direction:{d}; unicode-bidi:plaintext;
@@ -269,7 +390,8 @@ def caption_css(lang="ar"):
   -webkit-text-stroke:3px rgba(0,0,0,.9); paint-order:stroke fill;
   text-shadow:0 3px 8px rgba(0,0,0,.6); }}
 .cap .en {{ font-family: '{LATIN}', sans-serif; font-weight:700; font-size:{'.9em' if lang == 'ar' else '1em'}; }}
-.cap .kw {{ color: {YELLOW}; }}
+.cap .kw {{ color: {ACCENT}; }}
+.cap.in-card {{ max-width: {FACE_BOX[2] - 30}px; padding: 30px 24px; }}
 .cap .big {{ font-size: 1.6em; line-height: 1; }}
 .cap .big .en, .cap .en .big {{ font-size: inherit; }}
 """

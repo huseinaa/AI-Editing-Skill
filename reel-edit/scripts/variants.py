@@ -15,7 +15,7 @@ Version A is edited in full first. This then:
   5. names the export "<title> - Trial <version>.mp4" and transcribes the new master.
 A's opening is the first take in A's takes.json and must be one stretch of one take.
 """
-import argparse, io, json, os, re, shutil, subprocess, sys
+import argparse, io, json, os, re, shlex, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.stdout.reconfigure(encoding="utf-8")   # Arabic words on a Windows console
@@ -51,18 +51,19 @@ shutil.copytree(src, dst, ignore=skip)
 lines = []
 if os.path.exists(os.path.join(src, "cuts.txt")):
     for raw in io.open(os.path.join(src, "cuts.txt"), encoding="utf-8"):
-        words = raw.split("#")[0].split()
+        words = shlex.split(raw.split("#")[0])   # take names with spaces are quoted
         if words and (words[0] == "order" or a_open_stem in words[1:] or a.opening in words[1:]):
             continue
         lines.append(raw.rstrip("\n"))
 trim = " ".join(x for x in [f"from={a.t_from:.2f}" if a.t_from is not None else "",
                             f"to={a.t_to:.2f}" if a.t_to is not None else ""] if x)
+q = lambda name: f'"{name}"' if " " in name else name   # cuts.txt quotes names with spaces
 body_order = []
 for t in a_takes[1:]:
     if stem(t["take"]) not in body_order:
         body_order.append(stem(t["take"]))
 lines += [f"# version {a.version}: opening {a.opening} in place of A's {a_open_stem}",
-          f"drop {a_open_stem}"] + ([f"trim {a.opening} {trim}"] if trim else []) + [f"order {a.opening} {' '.join(body_order)}"]
+          f"drop {q(a_open_stem)}"] + ([f"trim {q(a.opening)} {trim}"] if trim else []) + [f"order {q(a.opening)} {' '.join(q(t) for t in body_order)}"]
 io.open(os.path.join(dst, "cuts.txt"), "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 # ---- 3. assemble

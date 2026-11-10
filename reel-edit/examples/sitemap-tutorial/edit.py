@@ -1,4 +1,4 @@
-# THE REFERENCE FOR THE DEFAULT LOOK (confirmed on a real reel, 2 Nov 2026: "this style is it").
+# THE PREVIOUS DEFAULT LOOK (2 Nov 2026 to 10 Nov 2026; replaced by examples/light-mode). Kept for when it is asked for.
 # Reel: Add Sitemap to Website, v3. Copy its structure, not its content. Assets it reads (screenshot,
 # real sitemap.xml, logo-*.svg) lived in the reel folder; see SKILL.md "The default look".
 
@@ -14,7 +14,6 @@ VIDEO = str(WORK / 'master.mp4')
 OUTPUT = str(FOLDER / 'Add Sitemap to Website - edited.mp4')
 CAPTION_LANG = 'ar'
 FACE = (720, 930)
-RISER = False
 ZOOM = []
 PUNCH = []
 YOUTUBE_END = None

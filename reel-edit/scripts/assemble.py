@@ -15,9 +15,10 @@ Run it once with no cuts, transcribe the master, then write cuts.txt and run it 
     tail 0.15                          # the end of the video keeps this much after the last word (default 0.3)
     clean UDKI8679 26.30-30.05         # a phone-mic take: adds the tone match from clean-eq.txt
     voice raw CGAK5759                 # skip the voice cleaning on one take (it still gets the -14 LUFS gain)
+    voice strong CGAK5759              # a noisy take (street, fan): RNNoise instead of the light denoise
 
-Every take's voice is cleaned and set to -14 LUFS (see VOICE below): highpass, RNNoise, a gentle
-expander for the room echo, a fixed gain, a limiter.
+Every take's voice is set to -14 LUFS (see VOICE below): highpass, a light denoise at the take's own
+room level, a fixed gain, a limiter. Natural on purpose: no RNNoise, gate or compressor by default.
 
 Every end in cuts.txt is written 0.06s after the last word. The video's very last end is the one
 exception: it is pushed out so END_TAIL is left after the word and it finishes, with a softer fade.
@@ -68,42 +69,47 @@ drop, trim, keep, clean, raw_voice = set(), {}, {}, {}, set()
 SKILL_ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
 
-# ---- the voice, every take.
+# ---- the voice, every take: natural by default.
 # Target -14 LUFS integrated, true peak under -1 dBTP: the common convention for Reels, Shorts and TikTok
-# (Instagram publishes no number; louder gains nothing because platforms turn it down). Tuned on Stuck on
-# Idea's takes: RNNoise takes the room down ~12 dB, the expander a further ~9 dB in pauses and makes the
-# sound die 1 to 2 dB faster after each word (his slight room echo), the speech itself is unchanged.
+# (Instagram publishes no number; louder gains nothing because platforms turn it down).
+# A clip-on mic already gives a clean voice (about 33 dB between speech and room on a usual take), so the
+# default only takes the rumble and a little of the room hiss away: a highpass and a light spectral denoise
+# set from the take's own quiet level. RNNoise plus an expander on every take made the voice sound watery
+# and chopped (user feedback, 10 Nov 2026), so RNNoise is now only for a take that needs it: `voice strong`.
 VOICE = {
     "lufs": -14.0,
     "limit": 0.84,                 # -1.5 dBFS sample peak, so true peak stays under -1 dBTP after AAC
-    "highpass": 80,
-    "rnnoise_mix": 0.85,           # a little of the room left so it never sounds underwater
-    "gate_below_speech": 14,       # expander threshold: this many dB under the take's speech level
-    "gate_range": 0.35,            # the most it lowers the room: -9 dB (0.25 sounded dead-silent in pauses)
-    "gate_release": 120,
-    # No compressor, on purpose: with one in the chain Whisper heard Arabic speech as English and wrote the
-    # whole transcript translated (tested 27 Oct 2026). Each take is already even (loudness range 1 to 2
-    # LU) and every take is set to the same level, so it was not needed.
+    "highpass": 70,
+    "denoise_db": 8,               # afftdn noise reduction, gentle: the room is lowered, never removed
+    "rnnoise_mix": 0.7,            # `voice strong <take>` only: a noisy take (street, fan, phone mic)
+    # No compressor and no gate, on purpose: a compressor made Whisper hear Arabic speech as English and
+    # write the whole transcript translated (tested 27 Oct 2026), and a gate chops the ends of words. Each
+    # take is already even (loudness range 1 to 3 LU) and every take is set to the same level.
 }
-voice_cache = {}
+strong_voice = set()
 
 
-def speech_level(src, t0, d, chain):
-    """dB of the loud 10% of 50 ms windows: his speaking level, ignoring pauses."""
+def quiet_level(src, t0, d):
+    """dB of the quiet 5% of 50 ms windows: the room between words, for the denoiser's noise floor."""
     import numpy as np
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t0:.3f}", "-t", f"{d:.3f}", "-i", src, "-vn", "-af", chain,
-                          "-ac", "1", "-ar", "48000", "-f", "f32le", "-"], capture_output=True, cwd=SKILL_ASSETS).stdout
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t0:.3f}", "-t", f"{d:.3f}", "-i", src, "-vn",
+                          "-af", f"highpass=f={VOICE['highpass']}", "-ac", "1", "-ar", "48000", "-f", "f32le", "-"],
+                         capture_output=True).stdout
     a = np.frombuffer(raw, np.float32)
     w = 2400
     db = [20 * np.log10(np.sqrt(np.mean(a[i:i + w] ** 2)) + 1e-9) for i in range(0, len(a) - w, w)]
-    return float(np.percentile(db, 90)) if db else -20.0
+    db = [x for x in db if x > -100]   # digital silence is not the room
+    return float(np.percentile(db, 5)) if db else -60.0
+voice_cache = {}
 
 
 def voice_chain(name, src, spans, phone):
     """The chain for one take, measured once over everything kept from it, so every stretch of a take gets
-    the same treatment: highpass, RNNoise, a gentle expander for the room tail, the phone-mic tone match (only on a `clean` take, from <workdir>/clean-eq.txt), then a fixed gain to
-    VOICE["lufs"] and a limiter. Fixed gain, never loudnorm: loudnorm pads the audio and the take drifts
-    out of sync. `voice raw <take>` in cuts.txt skips the cleaning (gain and limiter still apply)."""
+    the same treatment: highpass, a light denoise at the take's own room level, the phone-mic tone match
+    (only on a `clean` take, from <workdir>/clean-eq.txt), then a fixed gain to VOICE["lufs"] and a
+    limiter. Fixed gain, never loudnorm: loudnorm pads the audio and the take drifts out of sync.
+    `voice raw <take>` skips the cleaning (gain and limiter still apply), `voice strong <take>` uses
+    RNNoise for a noisy take."""
     if name in voice_cache:
         return voice_cache[name]
     t0, d = min(s for s, _ in spans), max(e for _, e in spans) - min(s for s, _ in spans)
@@ -111,11 +117,11 @@ def voice_chain(name, src, spans, phone):
     eq = (open(eq).read().strip() + ",") if phone and os.path.exists(eq) else ""
     if name in raw_voice:
         chain = eq
+    elif name in strong_voice:
+        chain = f"highpass=f={VOICE['highpass']},arnndn=m=rnnoise-sh.rnnn:mix={VOICE['rnnoise_mix']},{eq}"
     else:
-        base = f"highpass=f={VOICE['highpass']},arnndn=m=rnnoise-sh.rnnn:mix={VOICE['rnnoise_mix']}"
-        thr = 10 ** ((speech_level(src, t0, d, base) - VOICE["gate_below_speech"]) / 20)
-        chain = (f"{base},agate=threshold={thr:.4f}:ratio=2:range={VOICE['gate_range']}:attack=5:"
-                 f"release={VOICE['gate_release']}:knee=4:detection=rms,{eq}")
+        floor = min(max(quiet_level(src, t0, d), -80), -25)
+        chain = f"highpass=f={VOICE['highpass']},afftdn=nr={VOICE['denoise_db']}:nf={floor:.0f}:tn=1,{eq}"
     meter = subprocess.run(["ffmpeg", "-hide_banner", "-ss", f"{t0:.3f}", "-t", f"{d:.3f}", "-i", src, "-vn",
                             "-af", chain + "ebur128", "-f", "null", "-"], capture_output=True, text=True, cwd=SKILL_ASSETS).stderr
     lufs = float(meter.rsplit("I:", 1)[1].split("LUFS")[0])
@@ -131,10 +137,10 @@ if a.cuts:
         if cmd == "tail":
             END_TAIL = float(names[0])
             continue
-        if cmd == "voice":   # voice raw <take>: no denoise/expander/compressor on that take
-            if names[:1] != ["raw"]:
-                raise SystemExit(f"cuts.txt: unknown line '{raw.strip()}' (only 'voice raw <take>')")
-            names = names[1:]
+        if cmd == "voice":   # voice raw <take>: no cleaning; voice strong <take>: RNNoise for a noisy take
+            if names[:1] not in (["raw"], ["strong"]):
+                raise SystemExit(f"cuts.txt: unknown line '{raw.strip()}' (only 'voice raw <take>' or 'voice strong <take>')")
+            mode, names = names[0], names[1:]
         if cmd in ("keep", "clean"):
             names, spans = names[:1], [tuple(float(x) for x in r.split("-")) for r in names[1:]]
         unknown = [n for n in names if "=" not in n and n not in by_stem]
@@ -149,7 +155,7 @@ if a.cuts:
         elif cmd == "clean":
             clean.setdefault(names[0], []).extend(spans)
         elif cmd == "voice":
-            raw_voice.update(names)
+            (raw_voice if mode == "raw" else strong_voice).update(names)
         elif cmd == "order":
             takes = [by_stem[n] for n in names] + [f for f in takes if stem(f) not in names]
         else:

@@ -19,8 +19,13 @@ edit.py contract (Claude writes one per video, in the video's work dir):
                    "out"  eases back to normal over the window (the realization after it)
                  PUNCH stays the hard zoom on an emphasis line, and works on top of these
     ZOOM_LEVEL   how far an eased zoom goes, default 1.15
-    RISER        play assets/sfx/riser-hook.wav under the "hook" zoom, ending as it ends. Default False; set True only for a chosen sound cue
-    RISER_GAIN_DB riser level, default -6: its peak sits about 10 dB under the voice at -14 LUFS
+    SFX          [(time, "pop" | "click" | "whoosh" | "ding" | path, gain_db=None), ...] extra sound effects.
+                 Sounds are local/sfx/<name>.wav, else assets/sfx/<name>.wav, peak-normalized to -1 dBFS
+    AUTO_SFX     default True: a soft pop when a top pill or card first appears (not at 0, not on its
+                 quick states) and a soft whoosh as the face shrinks into a light screen. False: only SFX
+    FACE_CARD    the face in a rounded square on a light screen. Worked out from the light() visuals in the
+                 TIMELINE (adjacent ones merge, so the square stays up between them). Set it only to
+                 override: [(start, end), ...] or dicts {"window": (s, e), "box": .., "crop": .., "grow": True}
     OUTPUT       default "<video stem> - edited.mp4" next to the video
     YOUTUBE_END  seconds: where the YouTube copy ends, 0.3s after the last word before a DM keyword ask
                  (his automation only answers comments on Instagram). None when there is no keyword ask
@@ -64,8 +69,8 @@ def load(workdir):
     if bad:
         raise SystemExit(f'ZOOM entries must be (start, end, "hook" | "in" | "out") with end > start: {bad}')
     p.zoom_level = getattr(m, "ZOOM_LEVEL", 1.15)
-    p.riser = getattr(m, "RISER", False)
-    p.riser_gain_db = getattr(m, "RISER_GAIN_DB", -6)
+    p.sfx = [tuple(x) for x in getattr(m, "SFX", [])]
+    p.auto_sfx = getattr(m, "AUTO_SFX", True)
     p.quality = getattr(m, "QUALITY", "default")
     fp = getattr(m, "FACE_PIP", None)
     p.face_pip = [fp] if isinstance(fp, dict) else list(fp or [])
@@ -81,7 +86,44 @@ def load(workdir):
     missing = [v for v, _, _ in p.timeline if v not in p.visuals]
     if missing:
         raise SystemExit(f"TIMELINE uses visuals not defined in VISUALS: {missing}")
+    p.face_card = face_cards(p, getattr(m, "FACE_CARD", None))
     return p
+
+
+def face_crop(face, box):
+    """A crop of the full frame around the head with the face square's shape: head and shoulders, the
+    head in the upper half so the captions inside the square sit on the chest."""
+    from .components import W, H
+    fx, fy = face
+    bw, bh = box[2], box[3]
+    cw = 1300
+    ch = round(cw * bh / bw)
+    x = min(max(fx - cw // 2, 0), W - cw)
+    y = min(max(round(fy - .48 * ch), 0), H - ch)   # air above the hair
+    return (x, y, cw, ch)
+
+
+def face_cards(p, explicit):
+    """Windows where the face sits in the rounded square of a light screen."""
+    from .components import FACE_BOX
+    wins = []
+    if explicit is not None:
+        for w in explicit:
+            w = {"window": tuple(w)} if not isinstance(w, dict) else dict(w)
+            wins.append(w)
+    else:
+        spans = sorted((s, e) for v, s, e in p.timeline
+                       if isinstance(p.visuals[v], tuple) and len(p.visuals[v]) > 2 and p.visuals[v][2].get("face"))
+        for s, e in spans:
+            if wins and s - wins[-1]["window"][1] < 0.05:
+                wins[-1]["window"] = (wins[-1]["window"][0], max(e, wins[-1]["window"][1]))
+            else:
+                wins.append({"window": (s, e)})
+    for w in wins:
+        w.setdefault("box", FACE_BOX)
+        w.setdefault("crop", face_crop(p.face, w["box"]))
+        w.setdefault("grow", True)
+    return wins
 
 
 def kind_of(value):

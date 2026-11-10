@@ -19,7 +19,7 @@ os.makedirs(p.png, exist_ok=True)
 
 
 def wrap(text):
-    """English runs in Inter, isolated so bidi keeps them in order; *word* = yellow keyword."""
+    """English runs in Inter, isolated so bidi keeps them in order; *word* = the keyword, in the accent color."""
     text = re.sub(r"\*([^*]+)\*", lambda m: "\x00" + m.group(1) + "\x01", text)
     if p.lang == "ar":
         # apostrophes belong inside the English run, or "you're" splits into "re ... 'you"
@@ -36,7 +36,9 @@ def page(body, extra=""):
 meta_path = os.path.join(p.png, "meta.json")
 meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
 with sync_playwright() as pw:
-    b = pw.chromium.launch(channel=BROWSER)
+    # REEL_EDIT_BROWSER_ARGS: extra browser flags, e.g. "--no-sandbox" when the headless browser
+    # cannot reach the network (Google Fonts) on a machine
+    b = pw.chromium.launch(channel=BROWSER, args=os.environ.get("REEL_EDIT_BROWSER_ARGS", "").split())
     pg = b.new_page(viewport={"width": 1440, "height": 2560})
     n = 0
     for vid, value in p.visuals.items():
@@ -63,11 +65,14 @@ with sync_playwright() as pw:
         for i, (text, s, e) in enumerate(p.captions):
             sc = p.caption_style.get(i, {}).get("scale", 1)
             style = f' style="font-size:{78 * sc if p.lang == "ar" else 74 * sc:.0f}px"' if sc != 1 else ""
-            pg.set_content(page(f'<div id="c" class="cap"{style}>{wrap(text)}</div>', caption_css(p.lang)), wait_until="networkidle")
+            # inside the face square of a light screen the caption is narrower, and may take two lines
+            card = any(fc["window"][0] - 0.05 <= s < fc["window"][1] for fc in p.face_card)
+            cls = "cap in-card" if card else "cap"
+            pg.set_content(page(f'<div id="c" class="{cls}"{style}>{wrap(text)}</div>', caption_css(p.lang)), wait_until="networkidle")
             pg.evaluate("document.fonts.ready")
             el = pg.locator("#c")
             el.screenshot(path=os.path.join(p.png, f"c_{i:03d}.png"), omit_background=True)
-            if el.bounding_box()["height"] > 260 * max(sc, 1) * (1.6 if "class=\"big\"" in wrap(text) else 1):
+            if not card and el.bounding_box()["height"] > 260 * max(sc, 1) * (1.6 if "class=\"big\"" in wrap(text) else 1):
                 tall.append((i, text))
         if tall:
             print("WARNING two-line captions (split them):", tall)

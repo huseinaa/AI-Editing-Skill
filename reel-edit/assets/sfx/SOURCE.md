@@ -1,14 +1,23 @@
 # Sound effects
 
-The hook zoom can play a rising sound under the spoken hook. The file is **not included**: its license
-allows using it in your videos but not sharing the file on its own.
+The default look plays a few soft sound effects, well under the voice: a **pop** when a white pill or a
+card appears at the top, a **whoosh** as the face shrinks into a light screen, and on request a
+**click** or a **ding** (a check mark, a result). No riser: it was removed on 10 Nov 2026.
 
-To use it:
+The files are **not included** (most sound-effect licenses allow them in your videos but not sharing the
+files). Put your own here, or in `local/sfx/` (checked first, never committed), named:
 
-1. Download "Cinematic trailer riser" (item 790) from Mixkit: https://mixkit.co/free-sound-effects/riser/
-   (Mixkit Sound Effects Free License: commercial use, no credit needed).
-2. Convert it to WAV and save it here as `riser-hook.wav`:
-   `ffmpeg -i <downloaded file> -ar 48000 -ac 2 riser-hook.wav`
+| File | Used for | Good choice |
+|---|---|---|
+| `pop.wav` | a pill or card arriving | a short, soft pop or bubble, under 0.6 s |
+| `whoosh.wav` | the face shrinking into a light screen | a light air swish, about 0.5 s |
+| `click.wav` | a click on a recording, on request | a mouse click |
+| `ding.wav` | a check mark or a result, on request | a short bright ping |
 
-Any short riser works. Without the file the hook zoom plays silent, nothing breaks. Set `RISER = False`
-in a reel's `edit.py` to turn it off for one reel.
+Trim the silence at the start and peak-normalize each to -1 dBFS, for example:
+
+    ffmpeg -i <file> -af "silenceremove=start_periods=1:start_threshold=-50dB" -ar 48000 -ac 2 pop.wav
+
+build.py sets the level (pop -15 dB, whoosh -17, click -13, ding -15 under that peak). A missing file
+is skipped with a note, nothing breaks. `AUTO_SFX = False` in a reel's `edit.py` turns the automatic
+ones off; `SFX = [(time, "ding"), ...]` adds more.

@@ -109,11 +109,13 @@ hand already moves toward the phone in that 0.3 s, add `tail <shorter>` and say 
 cover the picture: a full-screen graphic on what is being said, fully opaque past the join and fading
 out over the next take.
 
-**The voice is cleaned and leveled on every take, automatically:** highpass, RNNoise, a gentle
-expander for room echo, a fixed gain to **-14 LUFS** (each take measured on its own, so takes from
-different days match), a limiter at -1.5 dBFS. Never `loudnorm` (it pads the audio and drifts out of
-sync), and no compressor (it can make Whisper translate Arabic speech to English; transcribe.py warns
-if that happens). A take the chain hurts: `voice raw <take>` in cuts.txt.
+**The voice is leveled on every take, automatically, and kept natural:** a highpass at 70 Hz, a light
+spectral denoise (8 dB) set from the take's own room level, a fixed gain to **-14 LUFS** (each take
+measured on its own, so takes from different days match), a limiter at -1.5 dBFS. No RNNoise, gate or
+compressor by default: on a clip-on mic they made the voice watery and chopped (10 Nov 2026), and a
+compressor can make Whisper translate Arabic speech to English. Never `loudnorm` (it pads the audio and
+drifts out of sync). A noisy take (street, fan, phone mic): `voice strong <take>` (RNNoise). A take the
+chain hurts: `voice raw <take>`.
 
 **A take recorded on the phone mic** (thinner, roomier, its quiet moments 5 to 10 dB above the mic
 takes) gets a tone match toward the mic takes:
@@ -140,7 +142,12 @@ assemble, then `python S/retime.py <workdir> <old takes.json>` moves every time 
 
 People change wording on camera. **The transcript is the truth, the script is a spelling guide.**
 
-- 3 to 4 words per natural phrase, **one line**; shorter at phrase endings. Every chunk starts on a word's start time. Stationary white text, weight 700, 3px dark outline on the 1440 master and a subtle shadow. Direct replacement, no fades, bouncing, or colored words by default.
+- 3 to 4 words per natural phrase, **one line**; shorter at phrase endings. Every chunk starts on a word's start time. Stationary white text, weight 700, 3px dark outline on the 1440 master and a subtle shadow. Direct replacement, no fades or bouncing.
+- **One key term in the accent color** (`*word*`): the tool, product or concept being named ("Supabase",
+  "WebView", "website"), not every English word. Most captions have none. The accent is a light tint of
+  the brand's bright color so it reads on dark footage (`"accent"` in the brand overrides it).
+- Inside the face square of a light screen, captions sit in the square's bottom, narrower; two lines are
+  fine there. build.py and render.py place them by themselves.
 - Arabic: Arabic letters, English terms stay Latin (app, AI, UI...). **Numbers read left to right**
   inside Arabic captions: write them with their separators ("5,000", "$53,000", "100%") and render.py
   keeps each one as an LTR run. Look at every caption with a number on the check sheet. Show monetary
@@ -153,80 +160,85 @@ People change wording on camera. **The transcript is the truth, the script is a 
 ## Step 3: Style, hook, beat plan, zooms
 
 1. **Style** in one line, using the tree in `STYLES.md`.
-2. **Hook.** 7 words max, at most two lines, plain white outlined text without a box or highlight block, complementing (not repeating) the first spoken line.
-   Write 3, use the best, list the other two.
+2. **Hook.** 7 words max, at most two lines, in a white pill at the top (`hook_card`), complementing
+   (not repeating) the first spoken line. Write 3, use the best, list the other two.
 3. **Beat plan.** Walk the transcript line by line and pick a visual from the idea bank. Every visual
    starts on the word that triggers it. Prefer an actual example for each named item. Face on punchlines. Check each visual has a purpose; no density quota.
-4. **Optional zooms:** keep the baseline calm. A script may mark `[zoom in + riser]` (the hook),
-   `[zoom in]` / `[zoom out]` (a reflective line and the realization after it) and `[hard zoom]` (an
-   emphasis line): place each on its line, matched by meaning; a mark whose line was cut is dropped
-   and named in the report. With no marks, add a zoom only when the delivery benefits. No scheduled
-   punch-ins or automatic hook effects. `RISER` defaults to False. Zooms stay on the face, never under
-   a full screen, split, or B-roll window.
+4. **Optional zooms:** keep the baseline calm. A script may mark `[hook zoom]` (the spoken hook; older
+   scripts say `[zoom in + riser]`, read it the same way), `[zoom in]` / `[zoom out]` (a reflective line
+   and the realization after it) and `[hard zoom]` (an emphasis line): place each on its line, matched
+   by meaning; a mark whose line was cut is dropped and named in the report. With no marks, add a zoom
+   only when the delivery benefits. No scheduled punch-ins. **No riser, ever** (removed 10 Nov 2026).
+   Zooms stay on the face, never under a light screen, split, or B-roll window.
 
 ## Step 4: Write edit.py
 
-**Start from `examples/sitemap-tutorial/edit.py`. It is the default look** (confirmed on a real reel).
-Copy its structure, not its content: hook, small cards under the chin, a full screen with the face
-circle for the one thing worth seeing big, captions moved below while a card is up, plain follow CTA.
-`examples/ui-ux-explanation/edit.py` shows the full project contract, but its dense graphics and
-caption lengths are historical. The contract is at the top of `scripts/reel_edit/project.py`, the
-components are in `scripts/reel_edit/components.py`. Use the components before writing new HTML, and
-build anything new from the same tokens.
+**Start from `examples/light-mode/edit.py`. It is the default look** (set 10 Nov 2026 from two reference
+reels the user picked: "the style is good ... use my brand identity"). Copy its structure, not its
+content. The contract is at the top of `scripts/reel_edit/project.py`, the components are in
+`scripts/reel_edit/components.py`. Use the components before writing new HTML, and build anything new
+from the same tokens. `examples/sitemap-tutorial/edit.py` (cards under the chin, the face in a circle) is
+the previous look, kept for when the user asks for it.
 
-### The default look
+### The default look: light mode
 
-A plain talking head with captions, plus **a real visual for every thing the speaker names**: a site,
-a file, an app, a step, a prompt. The face alone the rest of the time. Not a graphic every few seconds.
+The talking head with captions, and **two kinds of visuals**, each starting on the word that names it:
 
-1. **The hook:** `hook_card`, plain white outlined text at the top, on frame one.
-2. **Show the real thing, small.** The user's own site, page or file, never a mock-up. **An app or a
-   site is a screen recording of it being used, not a still:** record it headlessly with Playwright
-   (`record_video_dir`, the configured browser, 1280x800, never a visible window: the user may be
-   recording their desktop) and do the real thing in it (upload a file, type, play, scroll a site to
-   the bottom and back). Trim the clip from the moment the page is ready. A local JS build runs from a
-   scratch copy over `python -m http.server` (ES modules do not load from file://). A still screenshot
-   only for a file's text or when nothing moves. An app or brand gets its real logo: the simple-icons
-   SVG from `cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/<name>.svg`, saved into the reel folder,
-   in the brand's color. Never an emoji, never invented proof. If the thing named does not exist, say
-   so and ask; do not draw a fake.
-3. **Titles above the head, the explanation under the chin.** A step, day or section title is
-   `hook_card(text, size=76)` at the top for as long as that step lasts, changing directly to the next
-   title. Under the chin goes only what explains it: a screen recording in a rounded window
-   (`broll(clip, mode="bottom", top=CARD_TOP, height=420)`), or a white `card` (radius 36, centred, up
-   to 1000 px wide) holding the speaker's exact words (a prompt, a path) in a grey box at 40 px, chips,
-   or a logo. No title inside the card. `CARD_TOP` is the chin + ~40 px on that framing.
-   **States of one card change with a quick fade:** the first state `motion="in"`, middle ones
-   `"quick"` (0.15 s, fading in on top of the one before), the last `"quick-out"`. Never a full fade out
-   and in on every state, it flickers. Chips that appear one per spoken item keep their slots reserved
-   so the card never jumps.
-4. **Captions drop below while anything is up.** Every caption that starts while a card, the circle
-   or a bottom window is on screen gets `{"y": 1855}`. Otherwise y 1700.
-5. **One full screen, for the thing worth seeing big** (the file, the page, the product), with the face
-   in the circle under it (`FACE_PIP`) and the content ending above y ~1320. Its title sits at the top
-   in the hook style; a recording goes in a `broll(mode="bottom", top=520, height=760, motion="cut")`
-   window over a `full()` background.
-6. **A file is shown as itself.** In a `browser()` window with its real URL, its real text in monospace
-   33 px / 46 px lines, browser colors (tags `#881280`, attribute names `#994500`, values `#1A1AA6`),
-   long lines running off the edge. When the speaker says what matters, a second state makes those
-   lines bold on the highlight color. Headless Edge hangs on its own XML viewer, so lay the text out in
-   HTML yourself.
-7. **The CTA:** `follow_card` (or the user's ask), plain text at the top.
+1. **A white pill at the top, over the face** (`top_pill`), for a name, a label or a number being said:
+   the tool ("Supabase"), the concept ("Responsive", "WebView"), a count ("20+ automations"), a step
+   ("2 ways"). An icon on a blue tile (`icon("globe", 60, "#fff")` from lucide.dev, or
+   `brand_logo("supabase", 60, "#fff")` from simple-icons for a real app), the bold label, and when it
+   helps a `tag()` beside it ("1+ year", "Open Source") or a second icon with an arrow. **Its states
+   change in place** (`motion="in"`, then `"quick"`, last `"quick-out"`): "Free" becomes "Free → Paid
+   Plan", a check appears. Short: 1 to 5 s. The hook (`hook_card`) and the CTA (`follow_card`,
+   `send_card`, `keyword_card`) are the same white pill.
+2. **A light screen for anything worth seeing** (`light(panel(...))`): the light background, the thing in
+   a white panel in the top part (`PANEL_BOX`), and **the face shrinking from full screen into a big
+   rounded square under it** (`FACE_BOX`, 786x685), then growing back when the screen ends. build.py
+   does the shrink and the grow (0.4 s each, eased) and moves the captions into the square. Use it for
+   the real thing: a screen recording (`screen(clip)` over `light(panel("", bare=True))`), a screenshot,
+   a chat, a file, a diagram of how something works, a set of items (`box()` each, `dim=True` for the ones
+   not said yet so nothing jumps), a price table. Several per reel, each 2 to 6 s, with the face full
+   screen between them for opinions and punchlines. Two light screens back to back keep the face in the
+   square (the panel crossfades).
 
-### Full screens with the face in a circle
+What makes it look neat: white cards with soft blue-tinted shadows and generous radius, one blue
+accent, icons on tiles, bold Inter, a faint dot grid on diagram panels (`panel(..., dots=True)`), and
+everything big enough to read on a phone. **Fill the panel**: headings 60 px or more, labels 44 px or
+more, boxes 300 px or more.
 
-`FACE_PIP` as a list of windows, each
-`{"crop": square, "box": (500, 1360, 440, 440), "window": (s, e), "shape": "circle"}`, and the
-captions in those windows styled `{"y": 1855}`.
+- **Show the real thing.** The user's own site, page, app or file, never a mock-up. **An app or a site is
+  a screen recording of it being used, not a still:** record it headlessly with Playwright
+  (`record_video_dir`, the configured browser, 1280x800, never a visible window: the user may be
+  recording their desktop) and do the real thing in it (upload a file, type, play, scroll a site to the
+  bottom and back). Trim the clip from the moment the page is ready. A local JS build runs from a scratch
+  copy over `python -m http.server` (ES modules do not load from file://). A still screenshot only for a
+  file's text or when nothing moves. An app or brand gets its real logo (`brand_logo`), in its brand
+  color. Never an emoji, never invented proof. If the thing named does not exist, say so and ask; do not
+  draw a fake. A diagram is fine for how something works (a phone, an arrow, a website), never as proof.
+- **A file is shown as itself.** In a `browser()` window inside the panel with its real URL, its real text
+  in monospace, browser colors (tags `#881280`, attribute names `#994500`, values `#1A1AA6`), long lines
+  running off the edge. When the speaker says what matters, a second state makes those lines bold.
+  Headless Edge hangs on its own XML viewer, so lay the text out in HTML yourself.
+- **Captions** go inside the face square during a light screen, by themselves. Over the face they stay
+  at y 1700; a caption that starts while a `broll(mode="bottom")` window is up gets `{"y": 1855}`.
+- **Sound effects** (on by default, `AUTO_SFX`): a soft pop when a pill or the CTA arrives (not on frame
+  one, not on quick state changes) and a soft whoosh as the face shrinks into a light screen. Add a
+  `click` on a click in a recording or a `ding` on a check or a result with `SFX = [(time, "ding")]`.
+  Sparse and quiet: never two within 0.25 s, never over the voice's meaning. Files: `local/sfx/` or
+  `assets/sfx/` (see `assets/sfx/SOURCE.md`).
+- **No riser.** No background music unless the user supplies it.
 
-- 440 px, and the crop is a square around the whole head, hair to chin with air around it (about
-  `(245, 370, 1100, 1100)` on a usual framing). Check a frame: nothing touches the edge. No ring unless
-  `"ring": True`.
-- **The circle and the full screen cut in and out together, on the word that names the thing**, like
-  a cut between clips. No fade: a fade shows the face through the graphic. `full()`, `split()` and
-  `FACE_PIP` are hard cuts by default (`motion="ease"` brings the fade back). When that word is at a
-  take join, start on the join. If the frames before it show a reach, tighten that take's end instead
-  of starting the screen early.
+### The face square, details
+
+- Worked out from the `light()` visuals in the TIMELINE: no FACE_CARD needed. The crop is the head and
+  shoulders around `FACE`, head in the upper half with air above the hair. Override with
+  `FACE_CARD = [{"window": (s, e), "crop": (x, y, w, h)}]` when a framing is unusual; the crop must have
+  the square's shape (786:685).
+- The light screen cuts in on the word that names the thing; the face is still full size on that frame
+  and shrinks over it, so nothing flashes. When that word is at a take join, start on the join.
+- A light screen at the very start or end of the reel skips the shrink or the grow on that side.
+- The face circle (`FACE_PIP` with `"shape": "circle"`) is the old look: only when asked.
 
 ### Other layouts
 
@@ -253,14 +265,14 @@ captions in those windows styled `{"y": 1855}`.
 Hard layout rules the renderer does not enforce:
 - Everything inside the safe box: x 90 to 1350, y 360 to 1920 on the 1440x2560 master.
 - Text helpers begin at y 372, inside the safe box, above the face. Shorten or reduce text that approaches the eyes or mouth; never move it above y 360. Check the whole thought, including face movement.
-- Hooks, takeaways, and text CTAs are plain white outlined text at weight 800, without cards, pills, badges, buttons, or highlight blocks. Custom text: `overlay(html, top=372, motion="cut")` with `text-overlay` CSS. Graphic overlays retain `motion="ease"`.
+- Hooks, takeaways, CTAs and labels are white pills at the top (`hook_card`, `takeaway`, `top_pill`, the CTA cards), weight 800, ink text, one blue accent. No yellow highlight blocks. The old plain outlined text: `hook_card(text, style="outline")`, only when asked.
 - No white border on images or B-roll windows: round corners only (`BORDER = 0` in build.py).
 - Split panel content ends by ~560 px (the caption sits in the panel at y 1845).
-- Plain top text and captions stay white. In explanatory diagrams only, at most one highlight-color accent; error color only for wrong states. No decorative emoji.
+- Captions stay white with at most one accent-colored key term. In panels, the brand blue is the one accent; error color only for wrong states. No decorative emoji.
 - Show actual apps, articles, files and receipts as evidence. Never generate fake screenshots, testimonials, receipts, or results. If an asset is missing, stay on the face and report it.
 - Match B-roll to what is said and when it is said.
 - Check the intended platform's UI/crop at delivery; the safe box is a baseline, not proof that every TikTok or Shorts overlay clears every device.
-- Voice remains dominant over any supplied music/effects. Do not add background music automatically.
+- Voice remains dominant over the sound effects and any supplied music. Do not add background music automatically.
 - Consecutive states of one graphic keep shared elements in the same place, or the crossfade ghosts.
 - A visual that starts at 0 is there on frame one (no fade in).
 
@@ -373,5 +385,6 @@ instructions to update the skill apply immediately; the repeat rule only concern
   (set `"browser"` in the brand), and the Whisper **small** model in `~/.cache/faster-whisper-small`.
   `yt-dlp` is optional, only for downloading reference reels from links.
 - Rendering pulls fonts from Google Fonts, so it needs internet.
-- Personal files live in `local/` (brand, workflow, learned style, downloaded references) and next to
-  it in `deltas.md`, `history/` and `assets/sfx/`. All of them are git-ignored.
+- Personal files live in `local/` (brand, workflow, learned style, downloaded references, `sfx/`) and
+  next to it in `deltas.md`, `history/` and `assets/sfx/`. All of them are git-ignored.
+- Icons and logos load from jsDelivr (lucide-static, simple-icons) at render time, like the fonts.

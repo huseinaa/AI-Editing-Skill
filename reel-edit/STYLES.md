@@ -4,10 +4,10 @@
 
 | Style | What's on screen | Use it for |
 |---|---|---|
-| **CLEAN** | Your face, plain outlined hook and CTA, stationary 3-4-word captions. Zoom only when the delivery benefits | Stories, confessions, strong opinions, personal proof |
+| **CLEAN** | Your face, the hook and CTA as white pills, stationary 3-4-word captions. Zoom only when the delivery benefits | Stories, confessions, strong opinions, personal proof |
 | **PUNCH** | CLEAN with selective emphasis on the strongest lines. No zoom schedule, graphic quota, or colored caption words | Contrarian takes, myth-busts, "stop doing X", fast lists |
-| **EXPLAINER** | Real demonstrations first; simple diagrams, split panels, or progressive lists only when needed. Plain top takeaways | Concepts, definitions, frameworks, "X vs Y", steps |
-| **DEMO** | Your own screen recordings and footage: full screen, split under your face, or a small window. Face on every reveal | Build in public, tool walkthroughs, before/after |
+| **EXPLAINER** | Light screens: the real thing or a simple diagram in the panel, the face in the square under it. Names and labels as top pills | Concepts, definitions, frameworks, "X vs Y", steps |
+| **DEMO** | Your own screen recordings on light screens (`screen()`), the face in the square. Face full screen on every reveal | Build in public, tool walkthroughs, before/after |
 | **OFFER** | CLEAN base + relevant real proof + a plain keyword CTA; no cutaway quota | Selling something |
 
 Styles are defaults, not cages. Combine them when a video needs it and say so ("EXPLAINER, with PUNCH
@@ -38,8 +38,10 @@ Is the job to get a DM today?              -> OFFER
 
 | The line... | Visual | Mode | Component |
 |---|---|---|---|
-| The hook | Plain white outlined text, no box | overlay, first ~2.7 s | `hook_card` |
-| A claim or takeaway | One concise plain outlined statement | overlay | `takeaway` |
+| The hook | A white pill at the top, on frame one | overlay | `hook_card` |
+| A name, label or number ("Supabase", "20+ automations") | A white pill with an icon tile, a tag beside it; its states change in place | overlay | `top_pill`, `tag`, `icon`, `brand_logo` |
+| Something worth seeing | A light screen: the thing in the panel, the face shrinks into the square | light | `light`, `panel`, `screen`, `box`, `heading` |
+| A claim or takeaway | One concise statement in a white pill | overlay | `takeaway` |
 | "X vs Y" | Two boxes | split | `vs` |
 | "X means Y" | One huge word + one line | full | `statement` |
 | A list | Actual example per named item, or minimal progressive text for abstract steps | full / split | `list_rows`, `steps` |
@@ -48,11 +50,12 @@ Is the job to get a DM today?              -> OFFER
 | "The AI does X" | Prompt bubble + reply | split | `chat` |
 | A real number | One big stat (real, with a source) | full | `big_number` |
 | Something real you built | Your screen recording | split / full / small window | `broll` |
-| The spoken hook | Face first; optional hook zoom, riser separately opt-in | none | `ZOOM "hook"` + `RISER` |
+| The spoken hook | Face first; optional hook zoom (no riser) | none | `ZOOM "hook"` |
 | A reflective line | Optional reflective zoom that holds | none | `ZOOM "in"` |
 | The realization after it | Optional return from chosen zoom | none | `ZOOM "out"` |
 | A punchline or emphasis | Optional purposeful punch-in | none | `PUNCH` |
-| The CTA | Plain Follow / Send / Keyword text | overlay | `follow_card`, `send_card`, `keyword_card` |
+| The CTA | A white pill: Follow / Send / Comment KEYWORD | overlay | `follow_card`, `send_card`, `keyword_card` |
+| A pill or card arriving, the face shrinking | A soft pop, a soft whoosh (automatic) | sound | `AUTO_SFX`, `SFX` |
 
 **Purpose check before rendering:** identify what each visual or effect explains, demonstrates,
 or adds to the delivery. Remove decorative filler; no timer-based quota. Check real evidence,

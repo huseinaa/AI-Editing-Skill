@@ -59,6 +59,7 @@ if os.path.exists(brand_path):
     check(f"browser for rendering graphics ({BROWSER})", found,
           'install Microsoft Edge or Google Chrome, and set "browser" in brand.json to "msedge" or "chrome"')
 
-riser = os.path.join(ROOT, "assets", "sfx", "riser-hook.wav")
-check("hook riser sound (assets/sfx/riser-hook.wav)", os.path.exists(riser), "optional, see assets/sfx/SOURCE.md", required=False)
+for name in ("pop", "whoosh"):
+    found = any(os.path.exists(os.path.join(ROOT, d, "sfx", f"{name}{ext}")) for d in ("local", "assets") for ext in (".wav", ".mp3", ".m4a"))
+    check(f"sound effect {name} (local/sfx or assets/sfx)", found, "optional, see assets/sfx/SOURCE.md", required=False)
 print("\nready" if ok else "\nfix the MISS lines, then run this again")

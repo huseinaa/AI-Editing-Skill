@@ -10,7 +10,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DEFAULTS = {
     "name": "", "follow_line": "follow for more",
     "colors": {"ink": "#080B14", "panel": "#F7F8FA", "muted": "#5F6571", "primary": "#0051BD",
-               "bright": "#2F6BFF", "highlight": "#FAFF00", "error": "#D92D20"},
+               "bright": "#2F6BFF", "highlight": "#FAFF00", "error": "#D92D20",
+               "surface": "#F4F6FA", "tint": "#EAF1FF", "accent": ""},
     "fonts": {"latin": "Inter", "arabic": "Tajawal",
               "google_fonts_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900"
                                   "&family=Tajawal:wght@500;700;800;900&display=block"},
@@ -40,5 +41,15 @@ def load():
 BRAND = load()
 C, F = BRAND["colors"], BRAND["fonts"]
 INK, PANEL, MUTED, BLUE, BRIGHT, YELLOW, RED = C["ink"], C["panel"], C["muted"], C["primary"], C["bright"], C["highlight"], C["error"]
+# light mode: SURFACE is the background of a light screen, TINT the soft fill of an icon tile or tag,
+# ACCENT the color of a *keyword* in a caption (defaults to the bright brand color)
+def _lighten(hex_color, k):
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return "#" + "".join(f"{round(c + (255 - c) * k):02X}" for c in (r, g, b))
+
+
+# the caption keyword needs to read on dark footage under a dark outline: a lighter tint of the bright color
+SURFACE, TINT, ACCENT = C["surface"], C["tint"], C["accent"] or _lighten(C["bright"], 0.38)
 LATIN, ARABIC, FONTS_URL = F["latin"], F["arabic"], F["google_fonts_url"]
 LOGO, BROWSER, CAPTION_LANG, FOLLOW_LINE = BRAND["logo"], BRAND["browser"], BRAND["caption_language"], BRAND["follow_line"]

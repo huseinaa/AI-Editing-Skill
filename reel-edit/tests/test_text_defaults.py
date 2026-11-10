@@ -17,16 +17,23 @@ from reel_edit.project import load
 
 
 class TextDefaults(unittest.TestCase):
-    def test_legacy_helpers_now_choose_stationary_text(self):
+    def test_text_helpers_are_white_pills_in_the_safe_box(self):
+        # the default look since 10 Nov 2026: hook, takeaway and CTAs are white pills at the top
         values = [c.hook_card('A clear hook'), c.takeaway(None, 'One point'),
                   c.takeaway([('Good UI', 'good')], c.hl('Clarity'), 'Helpful', color='#f00'),
-                  c.follow_card('Build'), c.send_card('Share'), c.keyword_card('START', 'Get it')]
+                  c.follow_card('Build'), c.send_card('Share'), c.keyword_card('START', 'Get it'),
+                  c.top_pill('Supabase', c.icon('database', 60, '#fff'), after=c.tag('1+ year'))]
         for html, kind, options in values:
             self.assertEqual(kind, 'overlay')
-            self.assertEqual(options['motion'], 'cut')
             self.assertGreaterEqual(options['top'], c.SAFE_T)
-            self.assertIn('class="text-overlay"', html)
+            self.assertIn('class="pill', html)
             self.assertNotIn('class="card"', html)
+        self.assertEqual(c.hook_card('A clear hook')[2]['motion'], 'cut')   # there on frame one
+
+    def test_outlined_hook_is_still_available(self):
+        html, kind, options = c.hook_card('Old look', style='outline')
+        self.assertIn('class="text-overlay"', html)
+        self.assertEqual(options['motion'], 'cut')
 
     def test_graphic_motion_remains_available(self):
         self.assertEqual(c.overlay('graphic')[2]['motion'], 'ease')
@@ -34,13 +41,19 @@ class TextDefaults(unittest.TestCase):
         with self.assertRaises(ValueError):
             c.overlay('text', motion='bounce')
 
-    def test_hook_zoom_does_not_enable_riser(self):
+    def test_light_screens_give_one_face_square_when_adjacent(self):
         with tempfile.TemporaryDirectory() as td:
-            base = 'VIDEO="unused.mp4"\nCAPTIONS=[]\nVISUALS={}\nTIMELINE=[]\nZOOM=[(0,2,"hook")]\n'
-            for suffix, expected in [('', False), ('RISER=True\n', True)]:
-                Path(td, 'edit.py').write_text(base + suffix, encoding='utf-8')
-                with patch('reel_edit.project.probe_duration', return_value=3):
-                    self.assertEqual(load(td).riser, expected)
+            Path(td, 'edit.py').write_text(
+                'from reel_edit.components import *\nVIDEO="unused.mp4"\nCAPTIONS=[]\n'
+                'VISUALS={"a": light(panel("A")), "b": light(panel("B")), "c": light(panel("C")), "p": top_pill("X")}\n'
+                'TIMELINE=[("a",1,3),("b",3,5),("p",5,6),("c",7,9)]\nZOOM=[(0,2,"hook")]\nRISER=True\n', encoding='utf-8')
+            with patch('reel_edit.project.probe_duration', return_value=10):
+                p = load(td)
+            self.assertEqual([w["window"] for w in p.face_card], [(1, 5), (7, 9)])
+            self.assertEqual(p.face_card[0]["box"], c.FACE_BOX)
+            x, y, w, h = p.face_card[0]["crop"]
+            self.assertAlmostEqual(w / h, c.FACE_BOX[2] / c.FACE_BOX[3], places=2)   # no squashing
+            self.assertFalse(hasattr(p, "riser"))   # the riser is gone (user's call, 10 Nov 2026)
 
     def test_brand_fonts_and_palette_survive(self):
         with tempfile.TemporaryDirectory() as td:

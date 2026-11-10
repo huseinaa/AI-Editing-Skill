@@ -6,6 +6,12 @@ transcript. Apply the editing lessons, not the surrounding tutorial slide design
 
 ## Current decisions
 
+**Superseded on 10 Nov 2026 by the light-mode default look** (SKILL.md "The default look"): white pills
+at the top replace the plain outlined hook, takeaway and CTA text; a light screen with the face
+shrinking into a rounded square replaces cards under the chin and the face circle; captions may color
+one key term; soft pops and whooshes are on by default; the riser is gone. The rest below still holds:
+real artifacts, purposeful visuals, no effect quotas, complete sentences, actual-word timing.
+
 Plain white outlined hooks/top takeaways/CTAs; 3-4-word stationary captions; real artifacts and
 purposeful visual choices. No automatic effect quotas. These decisions supersede older mandatory
 card, yellow-block, caption-fade, hook-zoom, and riser defaults. Retain complete sentences, short

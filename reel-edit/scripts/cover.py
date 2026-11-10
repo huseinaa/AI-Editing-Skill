@@ -167,7 +167,9 @@ body {{ width:{W}px; height:{H}px; position:relative; overflow:hidden; font-fami
 </body></html>"""
 
 with sync_playwright() as pw:
-    b = pw.chromium.launch(channel=BROWSER)
+    # REEL_EDIT_BROWSER_ARGS: extra browser flags, e.g. "--no-sandbox" when the headless browser
+    # cannot reach the network (Google Fonts) on a machine
+    b = pw.chromium.launch(channel=BROWSER, args=os.environ.get("REEL_EDIT_BROWSER_ARGS", "").split())
     pg = b.new_page(viewport={"width": W, "height": H})
     pg.set_content(html, wait_until="networkidle")
     pg.evaluate("document.fonts.ready")
