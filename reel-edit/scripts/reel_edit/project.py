@@ -23,9 +23,11 @@ edit.py contract (Claude writes one per video, in the video's work dir):
                  Sounds are local/sfx/<name>.wav, else assets/sfx/<name>.wav, peak-normalized to -1 dBFS
     AUTO_SFX     default True: a soft pop when a top pill or card first appears (not at 0, not on its
                  quick states) and a soft whoosh as the face shrinks into a light screen. False: only SFX
-    FACE_CARD    the face in a rounded square on a light screen. Worked out from the light() visuals in the
-                 TIMELINE (adjacent ones merge, so the square stays up between them). Set it only to
-                 override: [(start, end), ...] or dicts {"window": (s, e), "box": .., "crop": .., "grow": True}
+    FACE_CARD    the face in a box: the rounded rectangle of a light screen, the bottom part of a hard split, the
+                 top-left box of a corner screen. Worked out from the light() / hard() / corner() visuals in the
+                 TIMELINE (adjacent ones with the same box merge; different boxes link and the face moves
+                 between them). Set it only to override: [(start, end), ...] or dicts
+                 {"window": (s, e), "box": .., "crop": .., "grow": True, "radius": 44, "shadow": True, "cap": "in"}
     OUTPUT       default "<video stem> - edited.mp4" next to the video
     YOUTUBE_END  seconds: where the YouTube copy ends, 0.3s after the last word before a DM keyword ask
                  (his automation only answers comments on Instagram). None when there is no keyword ask
@@ -90,7 +92,7 @@ def load(workdir):
     return p
 
 
-def face_crop(face, box):
+def face_crop(face, box, head=.48):
     """A crop of the full frame around the head with the face square's shape: head and shoulders, the
     head in the upper half so the captions inside the square sit on the chest."""
     from .components import W, H
@@ -99,30 +101,65 @@ def face_crop(face, box):
     cw = 1300
     ch = round(cw * bh / bw)
     x = min(max(fx - cw // 2, 0), W - cw)
-    y = min(max(round(fy - .48 * ch), 0), H - ch)   # air above the hair
+    y = min(max(round(fy - head * ch), 0), H - ch)   # air above the hair
     return (x, y, cw, ch)
 
 
+def options_of(value):
+    """The options dict of a visual: the third item of a tuple, or the broll dict itself."""
+    if isinstance(value, dict):
+        return value
+    return value[2] if isinstance(value, tuple) and len(value) > 2 else {}
+
+
+def face_layout(value):
+    """light | blur | hard | corner for a visual that puts the face in a box, else None."""
+    o = options_of(value)
+    return o.get("layout", "light") if o.get("face") else None
+
+
+def card_style(layout):
+    """Where the face goes for each layout: box, corner radius, shadow, and whether captions sit inside the box
+    ("in"), at the normal height ("normal") or low, under a recording ("low")."""
+    from . import components as K
+    if layout == "hard":
+        # the head high in the bottom part, so the face sits clear of the platform's bottom bar and captions go under it
+        return {"box": (0, K.HARD_Y, K.W, K.H - K.HARD_Y), "radius": 0, "shadow": False, "cap": "low", "head": .28}
+    if layout == "corner":
+        return {"box": K.CORNER_BOX, "radius": 36, "shadow": True, "cap": "low"}
+    return {"box": K.FACE_BOX, "radius": K.FACE_RADIUS, "shadow": True, "cap": "in"}   # light, blur
+
+
 def face_cards(p, explicit):
-    """Windows where the face sits in the rounded square of a light screen."""
-    from .components import FACE_BOX
+    """Windows where the face sits in a box (a light screen and the other layouts). Back-to-back spans with the same
+    box merge into one window. Back-to-back spans with different boxes stay two windows, linked: the face moves
+    from one box to the other instead of growing back to full screen in between."""
     wins = []
     if explicit is not None:
         for w in explicit:
             w = {"window": tuple(w)} if not isinstance(w, dict) else dict(w)
             wins.append(w)
     else:
-        spans = sorted((s, e) for v, s, e in p.timeline
-                       if isinstance(p.visuals[v], tuple) and len(p.visuals[v]) > 2 and p.visuals[v][2].get("face"))
-        for s, e in spans:
-            if wins and s - wins[-1]["window"][1] < 0.05:
+        spans = sorted((s, e, face_layout(p.visuals[v])) for v, s, e in p.timeline if face_layout(p.visuals[v]))
+        for s, e, layout in spans:
+            st = card_style(layout)
+            if wins and s - wins[-1]["window"][1] < 0.05 and wins[-1]["style"] == st:
                 wins[-1]["window"] = (wins[-1]["window"][0], max(e, wins[-1]["window"][1]))
+            elif wins and wins[-1]["window"][0] <= s < wins[-1]["window"][1] - 0.05:
+                continue   # a second visual inside an open window (a recording over its panel)
             else:
-                wins.append({"window": (s, e)})
+                wins.append({"window": (s, e), "style": st, **st})
     for w in wins:
-        w.setdefault("box", FACE_BOX)
-        w.setdefault("crop", face_crop(p.face, w["box"]))
+        w.setdefault("box", card_style("light")["box"])
+        for k, v in card_style("light").items():
+            w.setdefault(k, v)
+        w.setdefault("crop", face_crop(p.face, w["box"], w.pop("head", .48)))
         w.setdefault("grow", True)
+        w.pop("style", None)
+    for a, b in zip(wins, wins[1:]):   # linked windows: the face moves from a's box into b's
+        if abs(b["window"][0] - a["window"][1]) < 0.05:
+            a["to_next"] = True
+            b["from_prev"] = {k: a[k] for k in ("box", "crop", "radius", "shadow")}
     return wins
 
 

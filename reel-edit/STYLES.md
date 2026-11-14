@@ -40,7 +40,10 @@ Is the job to get a DM today?              -> OFFER
 |---|---|---|---|
 | The hook | A white pill at the top, on frame one | overlay | `hook_card` |
 | A name, label or number ("Supabase", "20+ automations") | A white pill with an icon tile, a tag beside it; its states change in place | overlay | `top_pill`, `tag`, `icon`, `brand_logo` |
-| Something worth seeing | A light screen: the thing in the panel, the face shrinks into the square | light | `light`, `panel`, `screen`, `box`, `heading` |
+| Something worth seeing, medium size | A split: the thing on top, the face in a tall rectangle. Rotate light, blurred backdrop and hard split | light / blur / hard | `light`, `light(.., layout="blur")`, `hard`, `top_screen`, `panel`, `screen`, `box`, `heading` |
+| Something small (a logo, a number, a price) | A floating card above the head, the face stays full screen | overlay | `float_card`, `image` |
+| A demo or a big screen to read | Screen first, the face small at the top left | corner | `corner` |
+| A source being explained or reacted to | The speaker cut out, standing in front of it | cutout | `cutout`, `image` |
 | A claim or takeaway | One concise statement in a white pill | overlay | `takeaway` |
 | "X vs Y" | Two boxes | split | `vs` |
 | "X means Y" | One huge word + one line | full | `statement` |
@@ -48,7 +51,7 @@ Is the job to get a DM today?              -> OFFER
 | A scenario ("imagine you click...") | A mockup that changes per beat | split | `browser`, `phone`, `demo_app` |
 | A mistake and its fix | Crossed-out wrong, then the right one | split | `wrong_right` |
 | "The AI does X" | Prompt bubble + reply | split | `chat` |
-| A real number | One big stat (real, with a source) | full | `big_number` |
+| A real number, a big reveal | One big stat (real, with a source), full takeover for 1 to 3 s | full | `big_number` |
 | Something real you built | Your screen recording | split / full / small window | `broll` |
 | The spoken hook | Face first; optional hook zoom (no riser) | none | `ZOOM "hook"` |
 | A reflective line | Optional reflective zoom that holds | none | `ZOOM "in"` |

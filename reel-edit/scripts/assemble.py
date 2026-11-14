@@ -80,7 +80,7 @@ VOICE = {
     "lufs": -14.0,
     "limit": 0.84,                 # -1.5 dBFS sample peak, so true peak stays under -1 dBTP after AAC
     "highpass": 70,
-    "denoise_db": 8,               # afftdn noise reduction, gentle: the room is lowered, never removed
+    "denoise_db": 4,               # afftdn, gentle: the room is lowered, never removed (8 with tracking read as processed, 14 Nov 2026)
     "rnnoise_mix": 0.7,            # `voice strong <take>` only: a noisy take (street, fan, phone mic)
     # No compressor and no gate, on purpose: a compressor made Whisper hear Arabic speech as English and
     # write the whole transcript translated (tested 27 Oct 2026), and a gate chops the ends of words. Each
@@ -121,7 +121,7 @@ def voice_chain(name, src, spans, phone):
         chain = f"highpass=f={VOICE['highpass']},arnndn=m=rnnoise-sh.rnnn:mix={VOICE['rnnoise_mix']},{eq}"
     else:
         floor = min(max(quiet_level(src, t0, d), -80), -25)
-        chain = f"highpass=f={VOICE['highpass']},afftdn=nr={VOICE['denoise_db']}:nf={floor:.0f}:tn=1,{eq}"
+        chain = f"highpass=f={VOICE['highpass']},afftdn=nr={VOICE['denoise_db']}:nf={floor:.0f},{eq}"
     meter = subprocess.run(["ffmpeg", "-hide_banner", "-ss", f"{t0:.3f}", "-t", f"{d:.3f}", "-i", src, "-vn",
                             "-af", chain + "ebur128", "-f", "null", "-"], capture_output=True, text=True, cwd=SKILL_ASSETS).stderr
     lufs = float(meter.rsplit("I:", 1)[1].split("LUFS")[0])

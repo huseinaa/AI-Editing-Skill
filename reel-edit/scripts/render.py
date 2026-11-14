@@ -15,6 +15,9 @@ from reel_edit.brand import BROWSER
 OVERLAY_PAD = 110  # transparent room for the card shadow, or it clips into a square behind the corners
 
 p = load(sys.argv[1])
+from reel_edit import components as _K   # edit.py may change the layout (face_portrait()): read it after loading
+CSS, FACE_BOX = _K.CSS, _K.FACE_BOX
+CARD_TEXT_W = FACE_BOX[2] - 60
 only = sys.argv[2:]
 os.makedirs(p.png, exist_ok=True)
 
@@ -68,12 +71,13 @@ with sync_playwright() as pw:
             style = f' style="font-size:{78 * sc if p.lang == "ar" else 74 * sc:.0f}px"' if sc != 1 else ""
             # always one line (the user's call, 10 Nov 2026). Inside the face square of a light screen the
             # caption shrinks to fit the square's width instead of wrapping
-            card = any(fc["window"][0] - 0.05 <= s < fc["window"][1] for fc in p.face_card)
+            fc = next((c for c in p.face_card if c["window"][0] - 0.05 <= s < c["window"][1]), None)
+            card = fc is not None and fc.get("cap", "in") == "in"   # a hard split or corner face keeps captions low
             cls = "cap in-card" if card else "cap"
             pg.set_content(page(f'<div id="c" class="{cls}"{style}>{wrap(text)}</div>', caption_css(p.lang)), wait_until="networkidle")
             pg.evaluate("document.fonts.ready")
             el = pg.locator("#c")
-            fit = CARD_TEXT_W if card else SAFE_W
+            fit = min(SAFE_W, fc["box"][2] - 60) if card else SAFE_W
             text_w = pg.evaluate("() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('c')); return r.getBoundingClientRect().width; }")
             if text_w > fit:
                 size = float(pg.evaluate("() => parseFloat(getComputedStyle(document.getElementById('c')).fontSize)"))

@@ -55,6 +55,50 @@ class TextDefaults(unittest.TestCase):
             self.assertAlmostEqual(w / h, c.FACE_BOX[2] / c.FACE_BOX[3], places=2)   # no squashing
             self.assertFalse(hasattr(p, "riser"))   # the riser is gone (user's call, 10 Nov 2026)
 
+    def test_face_box_is_a_vertical_rectangle_by_default(self):
+        # the face is always a vertical rectangle on a split (user's call, 14 Nov 2026)
+        x, y, w, h = c.FACE_BOX
+        self.assertGreater(h, w)
+        self.assertEqual(y + h, c.SAFE_B)
+        self.assertEqual(c.PANEL_BOX[1] + c.PANEL_BOX[3] + 45, y)
+
+    def test_layouts_carry_their_options(self):
+        self.assertEqual(c.light(c.panel("A"))[2]["layout"], "light")
+        self.assertEqual(c.light(c.panel("A"), layout="blur")[2]["layout"], "blur")
+        self.assertIn('class="light clear"', c.light("x", layout="blur")[0])
+        self.assertEqual(c.hard("x")[2]["layout"], "hard")
+        self.assertEqual(c.light("x", layout="hard")[2]["layout"], "hard")
+        self.assertEqual(c.corner("<b>x</b>")[2]["layout"], "corner")
+        clip = c.corner("demo.mp4")
+        self.assertEqual((clip["mode"], clip["layout"], clip["face"]), ("corner", "corner", True))
+        self.assertEqual(c.top_screen("demo.mp4")["mode"], "top")
+        self.assertTrue(c.cutout("x")[2]["cutout"])
+        self.assertEqual(c.float_card("x")[1], "overlay")
+        with self.assertRaises(ValueError):
+            c.light("x", layout="flipped")
+        x, y, w, h = c.CORNER_BOX
+        self.assertGreater(x, c.SAFE_L)   # inside the safe edges, not in the far corner
+        self.assertGreater(y, c.SAFE_T)
+
+    def test_different_face_boxes_link_instead_of_growing_back(self):
+        with tempfile.TemporaryDirectory() as td:
+            Path(td, 'edit.py').write_text(
+                'from reel_edit.components import *\nVIDEO="unused.mp4"\nCAPTIONS=[]\n'
+                'VISUALS={"a": light(panel("A")), "b": light(panel("B"), layout="blur"), "h": hard("H"), "k": corner("<b>K</b>")}\n'
+                'TIMELINE=[("a",1,3),("b",3,5),("h",5,7),("k",8,9)]\n', encoding='utf-8')
+            with patch('reel_edit.project.probe_duration', return_value=10):
+                p = load(td)
+            self.assertEqual([w["window"] for w in p.face_card], [(1, 5), (5, 7), (8, 9)])   # light + blur share a box
+            self.assertTrue(p.face_card[0].get("to_next"))
+            self.assertEqual(p.face_card[1]["from_prev"]["box"], c.FACE_BOX)
+            self.assertEqual(p.face_card[1]["box"], (0, c.HARD_Y, c.W, c.H - c.HARD_Y))
+            self.assertEqual(p.face_card[1]["radius"], 0)
+            self.assertEqual(p.face_card[2]["box"], c.CORNER_BOX)
+            self.assertNotIn("from_prev", p.face_card[2])
+            for fc in p.face_card:
+                x, y, w, h = fc["crop"]
+                self.assertAlmostEqual(w / h, fc["box"][2] / fc["box"][3], places=2)   # no squashing
+
     def test_brand_fonts_and_palette_survive(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

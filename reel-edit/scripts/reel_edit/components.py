@@ -4,16 +4,21 @@ Canvas is the 1440x2560 master (exported at 1080x1920). Instagram safe box: x 90
 Brand palette and fonts: brand.json at the skill root (see reel_edit/brand.py).
 
 An edit.py builds VISUALS from these. Each value is one of:
-    overlay(html)   graphic overlay over the face (top_pill, hook_card and the CTAs are overlays)
+    overlay(html)   graphic overlay over the face (top_pill, hook_card, float_card and the CTAs are overlays)
     light(inner)    THE DEFAULT SCREEN: a light background, the graphic in the top part (panel()), and
-                    the face shrinking from full screen into a big rounded square under it
-    split(inner)    face video on top, dark graphic panel below SPLIT_Y
-    full(inner)     full-screen graphic, voice carries on
-    broll(path, mode="full"|"split"|"pip"|"bottom"|"panel", start=0)   a real video clip, muted
+                    the face shrinking from full screen into a tall rounded rectangle under it.
+                    layout="blur" puts it on the speaker's own footage, blurred
+    hard(inner)     the hard split: the graphic edge to edge on top, the face edge to edge below
+    corner(src)     screen first: a recording or graphic full screen, the face small at the top left
+    cutout(inner)   the speaker cut out of their background, standing in front of the graphic
+    split(inner)    face video on top, dark graphic panel below SPLIT_Y (the older look)
+    full(inner)     full-screen graphic, voice carries on (a full takeover)
+    broll(path, mode="full"|"split"|"pip"|"bottom"|"panel"|"top", start=0)   a real video clip, muted
 
 The default look (light mode, user's call 10 Nov 2026): the face with white pills at the top for names,
-labels and numbers; a light screen with the face in a square for anything worth seeing; captions with
-one *keyword* in the accent color.
+labels and numbers; a split with the face in a vertical rectangle for anything worth seeing, varied with the
+other layouts by the size of the visual (14 Nov 2026, SKILL.md "The layouts, and which one when");
+captions with one *keyword* in the accent color.
 """
 
 from .brand import INK, PANEL, MUTED, BLUE, BRIGHT, YELLOW, RED, SURFACE, TINT, ACCENT, LATIN, ARABIC, FONTS_URL
@@ -25,11 +30,14 @@ SPLIT_H = H - SPLIT_Y
 PIP = (1000, 700)       # b-roll picture-in-picture window size (top of safe box)
 BOTTOM_TOP = 1100       # b-roll "bottom" window: from just under the mouth down to the safe box's bottom edge
 BOTTOM_CAP_Y = 1835     # captions sit across that window's bottom edge while it is up, clear of the face
-# light screens: the graphic sits in PANEL_BOX, the face in FACE_BOX (a rounded square, bottom on the safe line)
-PANEL_BOX = (120, 380, 1200, 810)       # x, y, w, h: ends 45 px above the face square
-FACE_BOX = (327, 1235, 786, 685)        # x, y, w, h
+# light screens: the graphic sits in PANEL_BOX, the face in FACE_BOX, a tall rounded rectangle with its bottom on
+# the safe line (the default since 14 Nov 2026: a wide square crops a talking face badly). face_square() = the old box.
+FACE_BOX = (420, 1140, 600, 780)        # x, y, w, h
+PANEL_BOX = (120, 380, 1200, FACE_BOX[1] - 45 - 380)   # x, y, w, h: ends 45 px above the face box
 FACE_RADIUS = 44
-FACE_CAP_Y = FACE_BOX[1] + FACE_BOX[3] - 100   # captions sit inside the bottom of the face square
+FACE_CAP_Y = FACE_BOX[1] + FACE_BOX[3] - 90    # captions sit inside the bottom of the face box
+HARD_Y = 1280                            # hard split: the visual edge to edge above, the face edge to edge below
+CORNER_BOX = (130, 400, 400, 520)        # screen first: the face top left, inside the safe edges, not in the corner
 PILL_TOP = SAFE_T + 12                   # white pills and the hook, at the top of the safe box
 ICONS = "https://cdn.jsdelivr.net/npm/lucide-static@0.460.0/icons"        # lucide.dev names: globe, database, lock...
 LOGOS = "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons"          # simpleicons.org slugs: supabase, github...
@@ -85,7 +93,39 @@ html, body {{ background: transparent; font-family: '{LATIN}', '{ARABIC}', sans-
 .tag {{ display: inline-flex; align-items: center; gap: 12px; border-radius: 999px; font-weight: 700; padding: 8px 24px; }}
 .box {{ background: #fff; border-radius: 32px; box-shadow: {SHADOW}; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 18px; font-weight: 800; color: {INK}; }}
+.box > span {{ text-align: center; line-height: 1.15; padding: 0 22px; }}
+.light.clear {{ background: transparent; }}
+.hard {{ width: {W}px; height: {H}px; position: relative; overflow: hidden; background: {INK}; }}
+.hard-top {{ position: absolute; left: 0; top: 0; width: {W}px; height: {HARD_Y}px; overflow: hidden;
+  background: linear-gradient(160deg, {BLUE}, {BRIGHT}); display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 36px; padding: {SAFE_T}px {SAFE_L}px 40px; }}
+.hard-top.bleed {{ padding: 0; }}
+.hard-top.bleed > img {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+.float {{ display: inline-flex; flex-direction: column; align-items: center; gap: 16px; background: #fff; border-radius: 36px;
+  box-shadow: {SHADOW}; padding: 18px; overflow: hidden; font-weight: 800; color: {INK}; }}
+.float img {{ display: block; border-radius: 22px; }}
 """
+
+
+def _face_box(w, h, cap_off):
+    global PANEL_BOX, FACE_BOX, FACE_CAP_Y, CSS
+    FACE_BOX = ((W - w) // 2, SAFE_B - h, w, h)
+    PANEL_BOX = (120, 380, 1200, FACE_BOX[1] - 45 - 380)
+    FACE_CAP_Y = FACE_BOX[1] + FACE_BOX[3] - cap_off
+    CSS = CSS.split("/* layout */")[0] + f"""/* layout */
+.panel {{ top: {PANEL_BOX[1]}px; height: {PANEL_BOX[3]}px; }}
+"""
+
+
+def face_portrait(w=600, h=780):
+    """The face box on light screens is this tall rounded rectangle by default (14 Nov 2026). Call it at the top
+    of an edit.py only to change its size; build.py and render.py read the layout after loading edit.py."""
+    _face_box(w, h, 90)
+
+
+def face_square():
+    """The old wide face box (786x685), only when the user asks for the square."""
+    _face_box(786, 685, 100)
 
 
 def hl(text):
@@ -165,7 +205,7 @@ def takeaway(pills, headline, sub="", color=INK):
 
 def _cta(icon_name, head, line):
     return overlay(f"""<div class="pill" style="flex-direction:column;gap:14px;padding:30px 52px;white-space:normal;text-align:center">
-      <div class="row" style="gap:26px;font-size:76px">{tile(icon(icon_name, 54, "#fff"), 104)}<span>{head}</span></div>
+      <div class="row" style="gap:26px;font-size:76px;justify-content:center">{tile(icon(icon_name, 54, "#fff"), 104) if icon_name else ""}<span>{head}</span></div>
       <div class="sub" style="font-size:42px;max-width:1080px">{line}</div></div>""", top=PILL_TOP, motion="ease")
 
 
@@ -179,9 +219,10 @@ def send_card(line):
     return _cta("send", "Send this", line)
 
 
-def keyword_card(keyword, line, verb="Comment"):
-    """Keyword CTA as a white pill, the keyword in the brand color. Use the user's CTA keyword only."""
-    return _cta("message-circle", f'{verb} <span style="color:{BRIGHT}">{keyword}</span>', line)
+def keyword_card(keyword, line, verb="Comment", icon_name=None):
+    """Keyword CTA as a white pill, centered: "Comment KEYWORD" with the keyword in the brand color, the line
+    under it. No icon by default (his call, 14 Nov 2026); icon_name="message-circle" brings the tile back."""
+    return _cta(icon_name, f'{verb} <span style="color:{BRIGHT}">{keyword}</span>', line)
 
 # ---------------- full-screen building blocks (put inside full(...)) ----------------
 def title_block(kicker, title, size=112):
@@ -343,12 +384,80 @@ def top_pill(label, icon_html=None, sub=None, size=80, after="", motion="ease"):
     return overlay(pill_html(label, icon_html, sub, size, after), top=PILL_TOP, motion=motion)
 
 
-def light(inner, face=True, motion="cut"):
+LAYOUTS = ("light", "blur", "hard", "corner")
+
+
+def light(inner, face=True, motion="cut", layout="light"):
     """THE DEFAULT SCREEN for anything worth seeing: a light background with `inner` (usually a panel())
-    in the top part, and the face shrinking from full screen into the rounded square FACE_BOX under it
-    (and growing back at the end). Captions move inside the face square by themselves.
+    in the top part, and the face shrinking from full screen into the rounded rectangle FACE_BOX under it
+    (and growing back at the end). Captions move inside the face box by themselves.
+    layout="blur": the same, on the speaker's own footage blurred and dimmed instead of the light ground.
+    layout="hard" / "corner": see hard() and corner().
     face=False: the light screen alone, no face (rare)."""
-    return (f'<div class="light">{inner}</div>', "full", {"motion": motion, "face": face})
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout must be one of {LAYOUTS}")
+    if layout == "hard":
+        return hard(inner, motion=motion)
+    if layout == "corner":
+        return corner(inner, motion=motion)
+    cls = "light clear" if layout == "blur" else "light"
+    return (f'<div class="{cls}">{inner}</div>', "full", {"motion": motion, "face": face, "layout": layout})
+
+
+def hard(inner="", bleed=False, motion="cut"):
+    """The hard split: the visual edge to edge over the top part (to HARD_Y), the face edge to edge under it,
+    a straight seam, no light ground and no rounded box. inner is centered inside the safe part of the top
+    (y SAFE_T to HARD_Y) on the brand gradient; bleed=True lets it fill the whole top (an image(..)).
+    A screen recording there: put top_screen(clip) in the TIMELINE over hard() with the same span."""
+    cls = "hard-top bleed" if bleed else "hard-top"
+    return (f'<div class="hard"><div class="{cls}">{inner}</div></div>', "full",
+            {"motion": motion, "face": True, "layout": "hard"})
+
+
+def top_screen(path, start=0.0, audio=False):
+    """A screen recording (or a still) filling the top part of a hard split, cover-cropped."""
+    return broll(path, mode="top", start=start, audio=audio, motion="cut")
+
+
+MEDIA = (".mp4", ".mov", ".webm", ".mkv", ".m4v", ".png", ".jpg", ".jpeg", ".webp")
+
+
+def corner(src, start=0.0, audio=False, motion="cut"):
+    """Screen first: the recording (a file path) or a graphic (HTML) full screen, and the face shrinking into a
+    small rounded rectangle at the top left (CORNER_BOX, inside the safe edges, never in the far corner).
+    A tall clip (a phone recording) fills the frame; a landscape one sits whole in a rounded window under the
+    face. Captions sit low, under it. For a demo where the screen matters more than the face."""
+    if isinstance(src, str) and src.lower().endswith(MEDIA):
+        d = broll(src, mode="corner", start=start, audio=audio, motion=motion)
+        d.update(face=True, layout="corner")
+        return d
+    return (f'<div class="light">{src}</div>', "full", {"motion": motion, "face": True, "layout": "corner"})
+
+
+def cutout(inner, scale=0.82, motion="cut"):
+    """The speaker cut out of their background (a matte per frame from scripts/matte.py, made by build.py on its
+    own) standing in front of the graphic, scaled by `scale` and anchored to the bottom edge. inner is a
+    full-screen graphic: put what matters in the top part (y 380 to ~1000), above the head. For a
+    screenshot, article or post being explained or reacted to."""
+    return (f'<div class="light">{inner}</div>', "full", {"motion": motion, "cutout": True, "scale": scale})
+
+
+def image(path, w=None, h=None, fit="contain", radius=22):
+    """A local image inlined into the HTML (the renderer cannot read file paths), sized in master px."""
+    import base64, mimetypes
+    mime = mimetypes.guess_type(path)[0] or "image/png"
+    encoded = base64.b64encode(open(path, "rb").read()).decode()
+    size = (f"width:{w}px;" if w else "") + (f"height:{h}px;" if h else "")
+    return f'<img src="data:{mime};base64,{encoded}" style="{size}object-fit:{fit};border-radius:{radius}px;display:block">'
+
+
+def float_card(inner, label=None, motion="ease", top=None):
+    """A small visual floating over the full-screen face, above the head: a logo, a screenshot, a number, a
+    post, a price. inner is usually image(path, w=..) or a big number. Keep it under ~380 px tall so it clears
+    the eyes (build.py warns when a card reaches down to them). Small things only: something to read goes
+    on a split."""
+    lab = f'<div style="font-size:46px">{label}</div>' if label else ""
+    return overlay(f'<div class="float">{inner}{lab}</div>', top=PILL_TOP if top is None else top, motion=motion)
 
 
 def panel(inner, dots=False, bare=False, h=None, style=""):

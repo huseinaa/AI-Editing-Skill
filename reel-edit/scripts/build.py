@@ -10,8 +10,16 @@ screen into the square and grows back) -> captions -> sound effects -> 1080x1920
 Instagram), with a soft audio fade, to "<OUTPUT stem> - YouTube.mp4".
 """
 import argparse, glob, json, os, subprocess
+# Stills (graphics, captions, masks) enter at a low frame rate and are brought to 30 fps inside the graph.
+# At 30 fps every looped still was decoded ahead in full, and a long reel ran ffmpeg out of memory (13 Nov 2026).
+STILL_FPS = "2"
+# Stills are placed on the timeline with place() (setpts after fps=30), never -itsoffset. A still at 2 fps can end up to 0.4 s before its -t, so every still chain clones its last frame (tpad) and the
+# enable window alone decides when it leaves. Without it a light screen dropped out mid-crossfade and the face
+# showed through for a few frames (14 Nov 2026).
 from PIL import Image, ImageDraw, ImageFilter
-from reel_edit.project import load, kind_of
+from matte import make_matte
+from reel_edit.brand import SURFACE
+from reel_edit.project import load, kind_of, options_of
 from reel_edit.components import (W, H, SAFE_L, SAFE_R, SAFE_W, SAFE_T, SAFE_B, SPLIT_Y, SPLIT_H, PIP, BOTTOM_TOP,
                                   BOTTOM_CAP_Y, PANEL_BOX, FACE_RADIUS, FACE_CAP_Y, PILL_TOP)
 
@@ -22,6 +30,8 @@ ap.add_argument("--quality")
 ap.add_argument("--youtube", action="store_true")
 a = ap.parse_args()
 p = load(a.workdir)
+from reel_edit import components as _K   # edit.py may change the layout (face_portrait()): read it after loading
+PANEL_BOX, FACE_CAP_Y = _K.PANEL_BOX, _K.FACE_CAP_Y
 meta = json.load(open(os.path.join(p.png, "meta.json")))
 OUT = a.out or p.output
 END_FADE = 0.12   # the YouTube copy's last word fades out over this, like the Instagram ending
@@ -54,7 +64,7 @@ vis = [[v, s, e, kind_of(p.visuals[v])] for v, s, e in p.timeline if e - s > 0.0
 STILL = (".png", ".jpg", ".jpeg", ".webp")
 sounds = []                               # (input index, start, end, file, start in file) of b-roll clips whose sound plays
 XA = 0.3                                  # the voice crossfades back in over this at a sound clip's end
-SOLID = {"split", "full", "broll_full", "broll_split"}
+SOLID = {"split", "full", "broll_full", "broll_split", "broll_corner"}
 CARD = {"overlay", "broll_pip", "broll_bottom", "broll_panel"}
 WINDOW = {"broll_pip", "broll_bottom", "broll_panel"}   # rounded b-roll windows over the face video
 GROW = 12                                 # frames (0.4 s) the face takes to shrink into the square and back
@@ -77,10 +87,14 @@ args = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats", "-i", p.
 # re-encode smears it anyway. Visually identical, ~6% smaller on this camera.
 # setpts first: a master joined from takes starts its video a few ms after 0, and without this the
 # very first frame of the reel is the dark background with no face on it.
-f = [f"[0:v]setpts=PTS-STARTPTS,hqdn3d=1.5:1.5:6:6,scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps=30:start_time=0[src{0 if p.face_pip or p.face_card else str()}]"]
-if p.face_pip or p.face_card:
-    k = len(p.face_pip) + len(p.face_card)
-    f.append(f"[src0]split={k + 1}[src]" + "".join(f"[srcp{j}]" for j in range(k)))
+# extra copies of the camera: the face boxes and pips (srcp), blurred backdrops (srcb) and cut-outs (srcc)
+blur_vis = [i for i, (v, s, e, k) in enumerate(vis) if options_of(p.visuals[v]).get("layout") == "blur"]
+cut_vis = [i for i, (v, s, e, k) in enumerate(vis) if options_of(p.visuals[v]).get("cutout")]
+copies = ([f"srcp{j}" for j in range(len(p.face_pip) + len(p.face_card))]
+          + [f"srcb{i}" for i in blur_vis] + [f"srcc{i}" for i in cut_vis])
+f = [f"[0:v]setpts=PTS-STARTPTS,hqdn3d=1.5:1.5:6:6,scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps=30:start_time=0[src{0 if copies else str()}]"]
+if copies:
+    f.append(f"[src0]split={len(copies) + 1}[src]" + "".join(f"[{c}]" for c in copies))
 
 # ---- eased zooms: "hook" eases in over the spoken hook and cuts back, "in" eases in
 # and holds (a reflective moment), "out" eases back (the realization). perspective takes float corners, so
@@ -210,6 +224,25 @@ def shadow_img(size, alpha=0.20):
     return im
 
 
+def clip_size(path):
+    if path.lower().endswith(STILL):
+        return Image.open(path).size
+    return tuple(int(x) for x in subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", path],
+        capture_output=True, text=True, check=True).stdout.strip().split("x")[:2])
+
+
+def corner_fit(b):
+    """Screen first: a tall clip (a phone recording) fills the frame; a landscape one would lose most of itself to a
+    cover crop, so it sits whole in a rounded window under the corner face, on the light ground."""
+    cw, ch = clip_size(b["broll"])
+    if ch >= cw:
+        return 0, (W, H), False
+    top = _K.CORNER_BOX[1] + _K.CORNER_BOX[3] + 50
+    k = min(SAFE_W / cw, (CAP_Y_SPLIT - 70 - top) / ch)
+    return top, (int(cw * k) // 2 * 2, int(ch * k) // 2 * 2), True
+
+
 def panel_box(b):
     """A screen recording on a light screen: fitted into PANEL_BOX, centered."""
     px, py, pw, ph = PANEL_BOX
@@ -222,6 +255,18 @@ def panel_box(b):
     k = min(pw / cw, ph / ch)
     bw, bh = int(cw * k) // 2 * 2, int(ch * k) // 2 * 2
     return py + (ph - bh) // 2, (bw, bh)
+
+def place(t):
+    """Put a still on the 30 fps timeline at frame round(t * 30), inside the graph (after fps=30, whose time base is
+    1/30). -itsoffset on a 2 fps image input rounds to its 1/2 s time base: captions and graphics came in up to
+    0.25 s late (14 Nov 2026)."""
+    return f"setpts=PTS+{round(t * 30)}"
+
+
+def frame_edge(t):
+    """Half a frame before frame round(t * 30): gte/lt against it picks whole frames, never a float tie."""
+    return f"{(round(t * 30) - 0.5) / 30:.4f}"
+
 
 # ---- visuals
 for i, (v, s, e, k) in enumerate(vis):
@@ -243,30 +288,33 @@ for i, (v, s, e, k) in enumerate(vis):
             win_top, (bw, bh) = bottom_box(b)
         elif k == "broll_panel":
             win_top, (bw, bh) = panel_box(b)
+        elif k == "broll_corner":
+            win_top, (bw, bh), corner_win = corner_fit(b)
         else:
-            bw, bh = {"broll_full": (W, H), "broll_split": (W, SPLIT_H), "broll_pip": PIP}[k]
+            bw, bh = {"broll_full": (W, H), "broll_split": (W, SPLIT_H), "broll_pip": PIP, "broll_top": (W, _K.HARD_Y)}[k]
         if b["broll"].lower().endswith(STILL):
-            args += ["-loop", "1", "-framerate", "30", "-t", f"{end - s + 0.3:.2f}", "-itsoffset", f"{s}", "-i", b["broll"]]
+            args += ["-loop", "1", "-framerate", STILL_FPS, "-t", f"{end - s + 0.3:.2f}", "-i", b["broll"]]
         else:
             args += ["-ss", str(b["start"]), "-t", f"{end - s + 0.3:.2f}", "-itsoffset", f"{s}", "-i", b["broll"]]
             if b.get("audio"):
                 sounds.append((n, s, e, b["broll"], b["start"]))
         fit = ((f"scale={bw - 2 * BORDER}:{bh - 2 * BORDER},pad={bw}:{bh}:{BORDER}:{BORDER}:white" if BORDER else f"scale={bw}:{bh}")
-               if k in ("broll_bottom", "broll_panel")
+               if k in ("broll_bottom", "broll_panel") or (k == "broll_corner" and corner_win)
                else f"scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh}")
-        prep = f"{fit},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration=30,format=rgba"
+        at = f",{place(s)}" if b["broll"].lower().endswith(STILL) else ""
+        prep = f"{fit},setsar=1,fps=30,tpad=stop_mode=clone:stop_duration=30{at},format=rgba"   # tpad before setpts, or it never pads
         f.append(f"[{n}:v]{prep}[bx{n}]")
         src_label, n_used = f"bx{n}", 1
-        if k in WINDOW:
-            args += ["-loop", "1", "-framerate", "30", "-t", f"{end - s + 0.3:.2f}", "-itsoffset", f"{s}", "-i", window_mask((bw, bh), v)]
-            f.append(f"[{n + 1}:v]format=gray[bm{n}]")
+        if k in WINDOW or (k == "broll_corner" and corner_win):
+            args += ["-loop", "1", "-framerate", STILL_FPS, "-t", f"{end - s + 0.3:.2f}", "-i", window_mask((bw, bh), v)]
+            f.append(f"[{n + 1}:v]fps=30,tpad=stop_mode=clone:stop_duration=2,{place(s)},format=gray[bm{n}]")
             f.append(f"[bx{n}][bm{n}]alphamerge[ba{n}]")
             src_label, n_used = f"ba{n}", 2
     else:
-        args += ["-loop", "1", "-framerate", "30", "-t", f"{end - s + 0.1:.2f}", "-itsoffset", f"{s}", "-i", os.path.join(p.png, f"v_{v}.png")]
+        args += ["-loop", "1", "-framerate", STILL_FPS, "-t", f"{end - s + 0.1:.2f}", "-i", os.path.join(p.png, f"v_{v}.png")]
         src_label, n_used = f"{n}:v", 1
 
-    chain = "format=rgba"
+    chain = "format=rgba" if src_label.startswith(("bx", "ba")) else f"fps=30,tpad=stop_mode=clone:stop_duration=2,{place(s)},format=rgba"
     if k in CARD:
         options = p.visuals[v][2] if k == "overlay" and len(p.visuals[v]) > 2 else {}
         # motion is read above the loop branch (ease / cut / in / out / quick / quick-out)
@@ -282,6 +330,8 @@ for i, (v, s, e, k) in enumerate(vis):
         if card_top is None:
             card_top = OVERLAY_Y
         top = win_top if k in WINDOW else card_top - meta[v]["pad"]
+        if k == "overlay" and card_top + meta[v]["h"] - 2 * meta[v]["pad"] > FY - 150:
+            print(f"WARNING {v} ({s:.2f}s) reaches down to the eyes: make it smaller (a floating card stays above the head)")
         x = f"{SAFE_L + (SAFE_W - w) // 2}"
         if k in WINDOW and b.get("x") is not None:
             x = str(b["x"])
@@ -299,9 +349,24 @@ for i, (v, s, e, k) in enumerate(vis):
         x, y = "0", "0"
         if k in SPLITS:
             y = str(SPLIT_Y) if (xf_in or not eased) else f"'{SPLIT_Y}+{OV_RISE * 2}*pow(max(0\\,1-(t-{s})/{SLIDE})\\,3)'"
+    if k == "broll_corner" and corner_win:
+        x, y = str(SAFE_L + (SAFE_W - bw) // 2), str(win_top)
     f.append(f"[{src_label}]{chain}[v{n}]")
-    enabled = f"gte(t,{s})*lt(t,{end:.2f})" if k == "overlay" and stationary else f"between(t,{s},{end:.2f})"
-    if k == "broll_panel":   # a soft shadow under the recording, so it sits on the light screen like a card
+    # on whole frames, the same ones the face square uses (round(t * 30)): between(t, s, e) also showed the frame at
+    # e, one frame after the face had grown back, so the graphic flashed alone for a frame (14 Nov 2026)
+    enabled = f"gte(t,{frame_edge(s)})*lt(t,{frame_edge(end)})"
+    n0, m0 = round(s * 30), round(end * 30)
+    if i in blur_vis:   # the speaker's own footage, blurred and dimmed, under a light screen with a clear ground
+        fade = f",fade=t=in:st={s}:d={XF}:alpha=1" if s >= 0.05 and xf_in else ""
+        f.append(f"[srcb{i}]trim=start_frame={n0}:end_frame={m0 + 1},setpts=PTS-STARTPTS,scale=360:640,boxblur=14:2,"
+                 f"scale={W}:{H},eq=brightness=-0.10:saturation=0.85,setpts=PTS+{n0}/(30*TB),format=rgba{fade}[bb{n}]")
+        f.append(f"[{last}][bb{n}]overlay=0:0:eof_action=pass:enable='{enabled}'[bbo{n}]")
+        last = f"bbo{n}"
+    if k == "broll_corner" and corner_win:   # a landscape recording in a window: the light ground under it
+        f.append(f"color=c={SURFACE}:s={W}x{H}:r=30:d={p.dur + 0.5:.2f},format=rgba[cg{n}]")
+        f.append(f"[{last}][cg{n}]overlay=0:0:eof_action=pass:enable='{enabled}'[cgo{n}]")
+        last = f"cgo{n}"
+    if k == "broll_panel" or (k == "broll_corner" and corner_win):   # a soft shadow under the recording, like a card
         sh = os.path.join(p.png, f"shadow_{v}.png")
         shadow_img((bw, bh)).save(sh)
         args += ["-loop", "1", "-framerate", "30", "-t", f"{end - s + 0.3:.2f}", "-itsoffset", f"{s}", "-i", sh]
@@ -309,8 +374,19 @@ for i, (v, s, e, k) in enumerate(vis):
         f.append(f"[{last}][{n + n_used}:v]overlay=x={sx}:y={win_top - SHADOW_PAD + SHADOW_Y}:eof_action=pass:enable='{enabled}'[sh{n}]")
         last, n_used = f"sh{n}", n_used + 1
     f.append(f"[{last}][v{n}]overlay=x={x}:y={y}:eof_action=pass:enable='{enabled}'[o{n}]")
+    out = f"o{n}"
+    if i in cut_vis:   # the speaker cut out of their background, standing in front of the graphic
+        sc = options_of(val).get("scale", 0.82)
+        args += ["-i", make_matte(p.video, n0, m0 + 1, os.path.join(p.png, f"matte_{v}_{n0}_{m0 + 1}.mkv"))]
+        mi, n_used = n + n_used, n_used + 1
+        sw, sh = int(W * sc) // 2 * 2, int(H * sc) // 2 * 2
+        f.append(f"[srcc{i}]trim=start_frame={n0}:end_frame={m0 + 1},setpts=PTS-STARTPTS,format=rgba[cf{n}]")
+        f.append(f"[{mi}:v]setpts=PTS-STARTPTS,scale={W}:{H},format=gray[cm{n}]")
+        f.append(f"[cf{n}][cm{n}]alphamerge,scale={sw}:{sh},setpts=PTS+{n0}/(30*TB)[cfig{n}]")
+        f.append(f"[{out}][cfig{n}]overlay=x={(W - sw) // 2}:y={H - sh}:eof_action=pass:enable='{enabled}'[oc{n}]")
+        out = f"oc{n}"
 
-    last, n = f"o{n}", n + n_used
+    last, n = out, n + n_used
 
 
 # ---- the face in a rounded window over full-screen graphics (a list reel: the list, the face, the illustration)
@@ -357,23 +433,25 @@ def frames_at(n0, count, out_dir, tag):
     return sorted(glob.glob(os.path.join(out_dir, f"{tag}_src_*.png")))
 
 
-def grow_frame(img, u, crop, box):
-    """The face at shrink progress u (0 = full screen, 1 = in the square), on a transparent canvas."""
+def grow_frame(img, u, crop, box, radius=FACE_RADIUS, shadow=True, start=None):
+    """The face at progress u from `start` to its box (u 0 = start, 1 = in the box), on a transparent canvas.
+    start = (crop, box, radius, shadow) of the box it comes from; None = full screen (the shrink and grow back)."""
+    c0, b0, r0, s0 = start or ((0, 0, W, H), (0, 0, W, H), 0, False)
     cx, cy, cw, ch = crop
     bx, by, bw, bh = box
     lerp = lambda a, b: a + (b - a) * u
-    k = lerp(1, bw / cw)
-    dx, dy, dw, dh = lerp(0, bx), lerp(0, by), lerp(W, bw), lerp(H, bh)
+    k = lerp(b0[2] / c0[2], bw / cw)
+    dx, dy, dw, dh = lerp(b0[0], bx), lerp(b0[1], by), lerp(b0[2], bw), lerp(b0[3], bh)
     sw, sh = min(dw / k, W), min(dh / k, H)
-    mx, my = lerp(W / 2, cx + cw / 2), lerp(H / 2, cy + ch / 2)
+    mx, my = lerp(c0[0] + c0[2] / 2, cx + cw / 2), lerp(c0[1] + c0[3] / 2, cy + ch / 2)
     sx, sy = min(max(mx - sw / 2, 0), W - sw), min(max(my - sh / 2, 0), H - sh)
     size = (max(2, round(dw)), max(2, round(dh)))
     piece = img.crop((round(sx), round(sy), round(sx + sw), round(sy + sh))).resize(size, Image.LANCZOS).convert("RGBA")
-    piece.putalpha(rounded(size, max(1, round(FACE_RADIUS * u))))
+    piece.putalpha(rounded(size, max(0, round(lerp(r0, radius)))))
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    if u > 0.02:
-        shadow = shadow_img(size, 0.22 * u)
-        canvas.alpha_composite(shadow, (round(dx) - SHADOW_PAD, round(dy) - SHADOW_PAD + SHADOW_Y))
+    alpha = lerp(0.22 if s0 else 0, 0.22 if shadow else 0)
+    if alpha > 0.005:
+        canvas.alpha_composite(shadow_img(size, alpha), (round(dx) - SHADOW_PAD, round(dy) - SHADOW_PAD + SHADOW_Y))
     canvas.alpha_composite(piece, (round(dx), round(dy)))
     return canvas
 
@@ -384,22 +462,29 @@ for j, fc in enumerate(p.face_card):
     s, e = fc["window"]
     n0, m0 = round(s * 30), round(e * 30)
     (cx, cy, cw, ch), (bx, by, bw, bh) = fc["crop"], fc["box"]
-    grow_in = fc.get("grow", True) and s >= 0.05 and m0 - n0 >= 2 * GROW + 6
-    grow_out = fc.get("grow", True) and e < p.dur - 0.05 and m0 - n0 >= 2 * GROW + 6
+    radius, shadow = fc.get("radius", FACE_RADIUS), fc.get("shadow", True)
+    prev = fc.get("from_prev")   # the face comes straight from the previous window's box, not from full screen
+    grow_in = fc.get("grow", True) and s >= 0.05 and m0 - n0 >= (GROW + 6 if prev else 2 * GROW + 6)
+    grow_out = (fc.get("grow", True) and not fc.get("to_next") and e < p.dur - 0.05
+                and m0 - n0 >= 2 * GROW + 6)
     h0, h1 = (n0 + GROW if grow_in else n0) / 30, (m0 - GROW if grow_out else m0) / 30
-    # held: a static shadow, then the face cropped and scaled into the rounded square
-    sh = os.path.join(p.png, f"faceshadow_{j}.png")
-    shadow_img((bw, bh), 0.22).save(sh)
-    args += ["-loop", "1", "-framerate", "30", "-t", f"{p.dur + 0.5:.2f}", "-i", sh,
-             "-loop", "1", "-framerate", "30", "-t", f"{p.dur + 0.5:.2f}", "-i", window_mask((bw, bh), f"facecard{j}", radius=FACE_RADIUS)]
+    hold = f"gte(t,{frame_edge(h0)})*lt(t,{frame_edge(h1)})"
+    # held: a static shadow (when the layout has one), then the face cropped and scaled into its box
+    args += ["-loop", "1", "-framerate", "30", "-t", f"{p.dur + 0.5:.2f}", "-i", window_mask((bw, bh), f"facecard{j}", radius=radius)]
     f.append(f"[{srcp}]crop={cw}:{ch}:{cx}:{cy},scale={bw}:{bh},format=rgba[fc0_{j}]")
-    f.append(f"[{n + 1}:v]format=gray[fcm{j}]")
+    f.append(f"[{n}:v]format=gray[fcm{j}]")
     f.append(f"[fc0_{j}][fcm{j}]alphamerge[fc{j}]")
-    hold = f"gte(t,{h0:.4f})*lt(t,{h1:.4f})"
-    f.append(f"[{last}][{n}:v]overlay=x={bx - SHADOW_PAD}:y={by - SHADOW_PAD + SHADOW_Y}:eof_action=pass:enable='{hold}'[fs{j}]")
-    f.append(f"[fs{j}][fc{j}]overlay=x={bx}:y={by}:eof_action=pass:enable='{hold}'[o{n}]")
-    last, n = f"o{n}", n + 2
-    # the shrink and the grow back, frame by frame
+    under, n = last, n + 1
+    if shadow:
+        sh = os.path.join(p.png, f"faceshadow_{j}.png")
+        shadow_img((bw, bh), 0.22).save(sh)
+        args += ["-loop", "1", "-framerate", "30", "-t", f"{p.dur + 0.5:.2f}", "-i", sh]
+        f.append(f"[{last}][{n}:v]overlay=x={bx - SHADOW_PAD}:y={by - SHADOW_PAD + SHADOW_Y}:eof_action=pass:enable='{hold}'[fs{j}]")
+        under, n = f"fs{j}", n + 1
+    f.append(f"[{under}][fc{j}]overlay=x={bx}:y={by}:eof_action=pass:enable='{hold}'[ofc{j}]")
+    last = f"ofc{j}"
+    # the shrink (or the move from the previous box) and the grow back, frame by frame
+    start_from = (prev["crop"], prev["box"], prev["radius"], prev["shadow"]) if prev else None
     for side, on in (("in", grow_in), ("out", grow_out)):
         if not on:
             continue
@@ -407,28 +492,39 @@ for j, fc in enumerate(p.face_card):
         tag = f"grow{j}{side}"
         srcs = frames_at(start, GROW, p.png, tag)
         if len(srcs) < GROW:
-            raise SystemExit(f"face square {j}: only {len(srcs)} frames at {start / 30:.2f}s for the {side} move")
+            raise SystemExit(f"face box {j}: only {len(srcs)} frames at {start / 30:.2f}s for the {side} move")
         for i, path in enumerate(srcs):
             u = i / GROW if side == "in" else 1 - (i + 1) / GROW
-            grow_frame(Image.open(path).convert("RGB"), ease(u), fc["crop"], fc["box"]).save(os.path.join(p.png, f"{tag}_{i:03d}.png"))
+            grow_frame(Image.open(path).convert("RGB"), ease(u), fc["crop"], fc["box"], radius, shadow,
+                       start_from if side == "in" else None).save(os.path.join(p.png, f"{tag}_{i:03d}.png"))
             os.remove(path)
         args += ["-framerate", "30", "-itsoffset", f"{start / 30:.4f}", "-i", os.path.join(p.png, f"{tag}_%03d.png")]
         f.append(f"[{n}:v]format=rgba[g{n}]")
-        f.append(f"[{last}][g{n}]overlay=0:0:eof_action=pass:enable='gte(t,{start / 30:.4f})*lt(t,{(start + GROW) / 30:.4f})'[o{n}]")
+        f.append(f"[{last}][g{n}]overlay=0:0:eof_action=pass:enable='gte(t,{frame_edge(start / 30)})*lt(t,{frame_edge((start + GROW) / 30)})'[o{n}]")
         last, n = f"o{n}", n + 1
-        if side == "in":
+        if side == "in" and not prev:
             face_grows.append(start / 30)
 
 
+def card_at(t):
+    return next((fc for fc in p.face_card if fc["window"][0] - 0.05 <= t < fc["window"][1]), None)
+
+
 def in_face_card(t):
-    return any(fc["window"][0] - 0.05 <= t < fc["window"][1] for fc in p.face_card)
+    """Captions inside the face box (light and blurred screens); a hard split or a corner face keeps them low."""
+    c = card_at(t)
+    return c is not None and c.get("cap", "in") == "in"
 
 
 def caption_y(t):
     """Normal height, inside the panel in split mode, across the bottom edge of a bottom b-roll window,
-    inside the bottom of the face square on a light screen."""
+    inside the bottom of the face box on a light screen."""
     if in_face_card(t):
-        return FACE_CAP_Y
+        box = card_at(t)["box"]
+        return FACE_CAP_Y if tuple(box) == tuple(_K.FACE_BOX) else box[1] + box[3] - 90
+    c = card_at(t)
+    if c is not None and c.get("cap") == "low":
+        return CAP_Y_SPLIT
     for v, s, e, k in vis:
         if s <= t < e and k in SPLITS:
             return CAP_Y_SPLIT
@@ -447,9 +543,9 @@ for i, (_, s, e) in enumerate(p.captions):
     cy = st.get("y") or caption_y(s if in_face_card(s) else (s + e) / 2)
     cx = st.get("x", SAFE_L + SAFE_W // 2)
     x0 = min(max(cx - w // 2, SAFE_L - 50), SAFE_R + 50 - w)   # the PNG carries 50px of transparent side padding
-    args += ["-loop", "1", "-framerate", "30", "-t", f"{e - s + 0.05:.2f}", "-itsoffset", f"{s}", "-i", path]
-    f.append(f"[{n}:v]format=rgba[c{n}]")  # a caption at 0 is on frame one
-    f.append(f"[{last}][c{n}]overlay=x={x0}:y={cy - h // 2}:eof_action=pass:enable='gte(t,{s})*lt(t,{e})'[o{n}]")
+    args += ["-loop", "1", "-framerate", STILL_FPS, "-t", f"{e - s + 0.05:.2f}", "-i", path]
+    f.append(f"[{n}:v]fps=30,tpad=stop_mode=clone:stop_duration=2,{place(s)},format=rgba[c{n}]")  # a caption at 0 is on frame one
+    f.append(f"[{last}][c{n}]overlay=x={x0}:y={cy - h // 2}:eof_action=pass:enable='gte(t,{frame_edge(s)})*lt(t,{frame_edge(e)})'[o{n}]")
     last, n = f"o{n}", n + 1
 
 # ---- export: Instagram-native 1080x1920, one encode from the full-res composite
@@ -536,6 +632,15 @@ elif a.youtube:
 args += ["-filter_complex_script", script, "-map", "[out]", "-map", amap,
          "-c:v", "libx264", "-preset", "slow", "-crf", str(CRF), "-maxrate", "8M", "-bufsize", "16M",
          "-profile:v", "high", "-x264-params", "aq-mode=3", "-r", "30", *audio, "-movflags", "+faststart", "-t", f"{p.dur}", OUT]
+# ffmpeg 7 decodes every input ahead on its own thread. A long reel has 100+ full-frame image inputs,
+# and their read-ahead queues together ran out of memory (13 Nov 2026, Open Recorder Free Loom).
+# A small queue per input keeps memory flat; the inputs still arrive in time.
+i = 1
+while i < len(args):
+    if args[i] == "-i":
+        args[i:i] = ["-thread_queue_size", "4"]
+        i += 2
+    i += 1
 subprocess.run(args, check=True)
 print(f"wrote {OUT} ({os.path.getsize(OUT) / 1e6:.1f} MB)")
 # the loudness check for the report: -14 LUFS (+-1) and true peak at or under -1 dBTP

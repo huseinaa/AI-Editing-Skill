@@ -110,7 +110,8 @@ cover the picture: a full-screen graphic on what is being said, fully opaque pas
 out over the next take.
 
 **The voice is leveled on every take, automatically, and kept natural:** a highpass at 70 Hz, a light
-spectral denoise (8 dB) set from the take's own room level, a fixed gain to **-14 LUFS** (each take
+spectral denoise (4 dB, no noise tracking: 8 dB with tracking sounded processed, 14 Nov 2026) set
+from the take's own room level, a fixed gain to **-14 LUFS** (each take
 measured on its own, so takes from different days match), a limiter at -1.5 dBFS. No RNNoise, gate or
 compressor by default: on a clip-on mic they made the voice watery and chopped (10 Nov 2026), and a
 compressor can make Whisper translate Arabic speech to English. Never `loudnorm` (it pads the audio and
@@ -145,9 +146,10 @@ People change wording on camera. **The transcript is the truth, the script is a 
 - 3 to 4 words per natural phrase, **one line**; shorter at phrase endings. Every chunk starts on a word's start time. Stationary white text, weight 700, 3px dark outline on the 1440 master and a subtle shadow. Direct replacement, no fades or bouncing.
 - **One key term in the accent color** (`*word*`): the tool, product or concept being named ("Supabase",
   "WebView", "website"), not every English word. Most captions have none. The accent is a light tint of
-  the brand's bright color so it reads on dark footage (`"accent"` in the brand overrides it).
+  the brand's bright color so it reads on dark footage (`"accent"` in the brand overrides it). If the
+  user finds the tint off-brand, set `"accent"` to their main brand color in `local/brand.json`.
 - **Always one line, everywhere** (3 to 4 words; split a longer phrase into two captions). Inside the
-  face square of a light screen, captions sit in the square's bottom and shrink to fit its width on one
+  face box of a light screen, captions sit in the box's bottom and shrink to fit its width on one
   line; build.py and render.py do it by themselves. render.py warns when a chunk had to shrink a lot:
   split it.
 - Arabic: Arabic letters, English terms stay Latin (app, AI, UI...). **Numbers read left to right**
@@ -195,19 +197,31 @@ The talking head with captions, and **two kinds of visuals**, each starting on t
    Plan", a check appears. Short: 1 to 5 s. The hook (`hook_card`) and the CTA (`follow_card`,
    `send_card`, `keyword_card`) are the same white pill.
 2. **A light screen for anything worth seeing** (`light(panel(...))`): the light background, the thing in
-   a white panel in the top part (`PANEL_BOX`), and **the face shrinking from full screen into a big
-   rounded square under it** (`FACE_BOX`, 786x685), then growing back when the screen ends. build.py
-   does the shrink and the grow (0.4 s each, eased) and moves the captions into the square. Use it for
+   a white panel in the top part (`PANEL_BOX`), and **the face shrinking from full screen into a tall
+   rounded rectangle under it** (`FACE_BOX`, 600x780), then growing back when the screen ends. build.py
+   does the shrink and the grow (0.4 s each, eased) and moves the captions into the box. **The face is
+   always this vertical rectangle on a split, never a wide square** (a square crops a talking face badly;
+   `face_square()` only when the user asks for it). Use it for
    the real thing: a screen recording (`screen(clip)` over `light(panel("", bare=True))`), a screenshot,
    a chat, a file, a diagram of how something works, a set of items (`box()` each, `dim=True` for the ones
    not said yet so nothing jumps), a price table. Several per reel, each 2 to 6 s, with the face full
    screen between them for opinions and punchlines. Two light screens back to back keep the face in the
-   square (the panel crossfades).
+   box (the panel crossfades). **Two light screens only a few frames apart must meet** (end the first
+   where the second starts): otherwise the face grows and shrinks again for a split second.
+3. **The other layouts below**, mixed in so a reel never shows the same layout over and over.
+4. **The CTA pill** (`keyword_card`): "Comment KEYWORD" centered with the line under it, no icon by
+   default (`icon_name=` adds one only when asked).
 
 What makes it look neat: white cards with soft blue-tinted shadows and generous radius, one blue
 accent, icons on tiles, bold Inter, a faint dot grid on diagram panels (`panel(..., dots=True)`), and
 everything big enough to read on a phone. **Fill the panel**: headings 60 px or more, labels 44 px or
-more, boxes 300 px or more.
+more, boxes 300 px or more. Box labels are centered, including ones that wrap to two lines. A pill's
+`tag()` only when it fits cleanly inside the pill; a tag that sticks out goes.
+
+- **Zoom into the part of a screenshot being talked about.** When the speaker names one option of an
+  app (the AI panel, the face circle, the timeline), show a short clip of the real screenshot easing in
+  on that part from the word, not the full static view. When they describe a specific window (a recorder
+  bar, a settings menu), show that window itself, not the app's home screen.
 
 - **Show the real thing.** The user's own site, page, app or file, never a mock-up. **An app or a site is
   a screen recording of it being used, not a still:** record it headlessly with Playwright
@@ -222,7 +236,7 @@ more, boxes 300 px or more.
   in monospace, browser colors (tags `#881280`, attribute names `#994500`, values `#1A1AA6`), long lines
   running off the edge. When the speaker says what matters, a second state makes those lines bold.
   Headless Edge hangs on its own XML viewer, so lay the text out in HTML yourself.
-- **Captions** go inside the face square during a light screen, by themselves, still one line. Over the face they stay
+- **Captions** go inside the face box during a light screen, by themselves, still one line. Over the face they stay
   at y 1700; a caption that starts while a `broll(mode="bottom")` window is up gets `{"y": 1855}`.
 - **Sound effects** (on by default, `AUTO_SFX`): a soft pop when a pill or the CTA arrives (not on frame
   one, not on quick state changes) and a soft whoosh as the face shrinks into a light screen. Add a
@@ -231,15 +245,54 @@ more, boxes 300 px or more.
   `assets/sfx/` (see `assets/sfx/SOURCE.md`).
 - **No riser.** No background music unless the user supplies it.
 
-### The face square, details
+### The layouts, and which one when
 
-- Worked out from the `light()` visuals in the TIMELINE: no FACE_CARD needed. The crop is the head and
-  shoulders around `FACE`, head in the upper half with air above the hair. Override with
-  `FACE_CARD = [{"window": (s, e), "crop": (x, y, w, h)}]` when a framing is unusual; the crop must have
-  the square's shape (786:685).
+Not every visual is a light screen. Pick the layout by **how big the visual is and whether it has to be
+read**, and vary it: never the same layout three times in a row, splits come and go (a split held the
+whole reel reads as a faceless "split-screen" video). State the layout of each visual in the beat plan.
+
+| Visual | Example | Layout | Call |
+|---|---|---|---|
+| Nothing to show | opinions, punchlines, "trust me" lines | the face alone | none |
+| Small, read at a glance | a logo, a number, a price, one word, a tiny screenshot | **floating card** over the full-screen face, above the head | `float_card(image(path, w=640), label=..)` |
+| Medium, readable | a screenshot, a short list, a simple diagram, a chat | **a split**, rotating three looks: | |
+| | | light screen (light ground, panel, face rectangle) | `light(panel(..))` |
+| | | blurred backdrop (the same on the speaker's own footage, blurred and dimmed) | `light(panel(..), layout="blur")` |
+| | | hard split (visual edge to edge on top, face edge to edge below, straight seam) | `hard(inner)`, a recording: `hard("")` + `top_screen(clip)` |
+| Big, has to be read or watched | a full app screen, a demo, a code file, a long page | **screen first**, the face in a small rectangle top left (inside the safe edges, never the far corner) | `corner(clip_or_html)` |
+| A punch, not information | a big reveal, a shocking number, a meme beat | **full takeover**, 1 to 3 s, hard cut in and out, at most twice a reel | `full(big_number(..))`, `broll(clip)` |
+| A source being explained or reacted to | an article, a post, a tweet, a pricing page | **cut-out**: the speaker cut out of their background, standing in front of it | `cutout(inner)` |
+
+Pacing: a visual change every 4 to 8 s on a fast reel, 7 to 10 s on a measured teaching reel. This mix is
+directional (creator-tool guides agree, no controlled study exists): when the user's own numbers (hook
+tests, retention) favour a layout, they win over this table.
+
+Details:
+- **Floating card**: keep it under ~380 px tall; build.py prints a WARNING when an overlay reaches down to
+  the eyes. Something that needs reading does not go in a floating card.
+- **Hard split**: inner is centered in the safe part of the top (y 360 to HARD_Y 1280) on the brand
+  gradient; `hard(image(..), bleed=True)` fills the whole top with an image. The face's head sits high in
+  the bottom part and captions go under it.
+- **Screen first**: a tall clip (a phone recording) fills the frame; a landscape recording sits whole in a
+  rounded window under the face (a cover crop would cut most of it away). Captions sit low, under it.
+- **Cut-out**: put what matters in the top part (y 380 to ~1000), the speaker stands in front at 82% size
+  anchored to the bottom (`scale=`). build.py makes the matte by itself (`scripts/matte.py`,
+  RobustVideoMatting on the CPU, roughly 0.3 s per frame; the ~14 MB model downloads once to
+  `~/.cache/reel-edit/`). Keep cut-outs to a few seconds each.
+- **Back-to-back layouts with different face boxes** (a light screen straight into a hard split): the face
+  moves from one box into the other, it never grows back to full screen in between.
+
+### The face box, details
+
+- Worked out from the `light()` / `hard()` / `corner()` visuals in the TIMELINE: no FACE_CARD needed. The
+  crop is the head and shoulders around `FACE`, head in the upper half with air above the hair. Override
+  with `FACE_CARD = [{"window": (s, e), "crop": (x, y, w, h)}]` when a framing is unusual; the crop must
+  have the box's shape (600:780 for the default rectangle).
 - The light screen cuts in on the word that names the thing; the face is still full size on that frame
   and shrinks over it, so nothing flashes. When that word is at a take join, start on the join.
 - A light screen at the very start or end of the reel skips the shrink or the grow on that side.
+- `face_portrait(w, h)` at the top of edit.py changes the rectangle's size; `face_square()` brings back the
+  old 786x685 box, only when asked.
 - The face circle (`FACE_PIP` with `"shape": "circle"`) is the old look: only when asked.
 
 ### Other layouts
@@ -291,6 +344,17 @@ crosses the safe box, no caption overlaps a graphic, nothing jumps between state
 is one line. **Frame one must be the real picture** (face, hook, first caption): a `WARNING` from
 check.py means fix and rebuild. A render that times out is usually Google Fonts: re-run one visual at
 a time (`render.py <workdir> <id>`) until it prints `rendered`.
+
+**No flashes between clips.** Look at the frames around every light-screen start, end and handover
+(3 before to 4 after each edge): no frame of the full face at low opacity, no black or empty frame, no
+graphic left alone after the face has grown back. build.py keeps stills on screen until their window
+ends and puts every window on whole frames; a flash that still shows is a timing bug to fix, not a
+render glitch.
+
+**A reel too long for one ffmpeg graph** (about 60 s and up with many visuals): build it in chunks with
+`python S/chunked.py <workdir> <cut1> [<cut2> ...] [--youtube]`. Each cut must sit in the middle of a
+full-face stretch, never within 0.1 s of a light screen starting or ending (the face would jump between
+its box and full screen at the join). Every face-box layout and cut-out counts. The script refuses a cut that breaks this.
 
 ## Step 6: Cover
 

@@ -68,9 +68,10 @@ VISUALS = {
     't2': top_pill('Collection + prices', icon("tag", 60, "#fff"), sub='first'),
     't3': top_pill('The website does the job', icon("globe", 60, "#fff")),
     't4': top_pill('Not any website', icon("globe", 60, "#fff")),
-    'm1': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 1, False))),
-    'm2': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 2, False))),
-    'm3': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 3, False))),
+    # the same split on the speaker's own footage, blurred: vary the layouts by the size of the visual (SKILL.md)
+    'm1': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 1, False)), layout="blur"),
+    'm2': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 2, False)), layout="blur"),
+    'm3': light(panel(heading('A website that sells', tile(icon("globe", 50, "#fff"), 88), 62) + boxes(MUST, 3, False)), layout="blur"),
     'sitebg': light(panel('', bare=True)),
     'site': screen(SITE_CLIP),
     'cta': keyword_card('WEBSITE', 'and I\u2019ll reach out'),

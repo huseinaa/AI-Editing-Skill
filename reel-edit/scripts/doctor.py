@@ -25,6 +25,8 @@ check("python: truststore (only behind a network that re-signs HTTPS)", importli
       "pip install truststore", required=False)
 check("python: yt-dlp (only to download reference reels from links)", importlib.util.find_spec("yt_dlp"),
       "pip install yt-dlp", required=False)
+check("python: onnxruntime (only for cutout(), the speaker cut out in front of a graphic)", importlib.util.find_spec("onnxruntime"),
+      "pip install onnxruntime", required=False)
 
 model = os.path.expanduser("~/.cache/faster-whisper-small/model.bin")
 check("Whisper small model (~/.cache/faster-whisper-small)", os.path.exists(model),

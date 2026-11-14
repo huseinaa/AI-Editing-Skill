@@ -16,7 +16,7 @@ You give it a folder with the takes you filmed on your phone. It:
 2. **Cleans your voice.** It removes background noise and room echo, and sets the volume to the level Instagram and YouTube expect.
 3. **Writes captions from what you actually said.** It listens to the audio, not your script, and times every caption to your words.
 4. **Picks an edit style** from five (CLEAN, PUNCH, EXPLAINER, DEMO, OFFER) based on what you're saying.
-5. **Adds the visuals.** You get a plain outlined text hook, stationary 3-4-word captions, real screenshots or footage, and explanatory graphics only where useful. Zooms and risers are optional. It keeps all of it inside the area Instagram doesn't cover.
+5. **Adds the visuals.** A text hook in a white pill, stationary 3-4-word captions, and real screenshots, screen recordings or explanatory graphics where they help. It mixes the layout by the size of what's shown: a small floating card over your face for a logo or a number, a split with your face in a vertical rectangle for something to read (on a light background, on your own footage blurred, or a hard edge-to-edge split), the screen first with your face small at the top left for a demo, a full-screen takeover for a big reveal, or you cut out and standing in front of a post you're explaining. Zooms are optional. It keeps all of it inside the area Instagram doesn't cover.
 6. **Makes the cover:** a frame of you smiling, your logo and the title.
 7. **Exports** a 1080x1920 video ready to post on Reels, Shorts or TikTok.
 
@@ -68,6 +68,9 @@ Or copy the `reel-edit` folder there instead (then an update means copying it ag
 ```
 pip install faster-whisper playwright pillow numpy
 ```
+
+Optional: `pip install onnxruntime` for the cut-out layout (you standing in front of a graphic). Its
+matting model (about 14 MB) downloads by itself the first time it's used.
 
 **4. Download the speech model** (about 480 MB, one time)
 
